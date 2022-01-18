@@ -1,4 +1,5 @@
 from re import split
+from time import sleep
 import telebot
 import random
 
@@ -13,14 +14,8 @@ def aboba(message):
         que_s = text.split("кто", 1)
         que = que_s[1]
         result = random.choice(members) + que
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(5)
         bot.reply_to(message, result)
-
-
-
-
-
-
-
-
 
 bot.polling(none_stop=True) 
