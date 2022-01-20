@@ -9,7 +9,6 @@ conn = psycopg2.connect("postgres://sebpvdyzyozixc:b9fba55dfe23ccfaeb94b7e63799a
 db_cursor = conn.cursor()
 
 
-
 bot = telebot.TeleBot("5011828394:AAHNPKq01NiqzYiXdA4NVgArJMGfkWHXZL4")
 
 
@@ -17,19 +16,20 @@ bot = telebot.TeleBot("5011828394:AAHNPKq01NiqzYiXdA4NVgArJMGfkWHXZL4")
 def aboba(message):
     id = message.from_user.id
     username = message.from_user.username
+    chat_id = message.chat.id
     text = message.text.lower()
     members = []
-    db_cursor.execute(f"SELECT id FROM users.user WHERE id = {id}")
+    db_cursor.execute(f"SELECT id, chat_id FROM users.user WHERE id = {id} AND chat_id = {chat_id}")
     db_result = db_cursor.fetchone()
 
     if not db_result:
-        db_cursor.execute("INSERT INTO users.user(id, username) VALUES (%s, %s)", (id, username))
+        db_cursor.execute("INSERT INTO users.user(id, username, chat_id) VALUES (%s, %s, %s)", (id, username, chat_id))
         conn.commit()
 
     if "быдлик кто" in text:
         que_s = text.split("кто", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username,tag FROM users.user")
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
         members = db_cursor.fetchall()
         select = random.choice(members)
         result = select[1] + que
@@ -42,7 +42,7 @@ def aboba(message):
     if "быдлик у кого" in text:
         que_s = text.split("кого", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username,tag FROM users.user")
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
         members = db_cursor.fetchall()
         select = random.choice(members)
         result = "У " + select[1] + que
@@ -53,10 +53,10 @@ def aboba(message):
         bot.reply_to(message, result)
 
     if "быдлик не тегай меня" in text:
-        db_cursor.execute(f"SELECT tag FROM users.user WHERE id = {id}")
+        db_cursor.execute(f"SELECT tag FROM users.user WHERE id = {id} AND chat_id = {chat_id}")
         db_result = db_cursor.fetchone()[0]
         if db_result == True:
-            db_cursor.execute(f"UPDATE users.user SET tag = False WHERE id = {id}")
+            db_cursor.execute(f"UPDATE users.user SET tag = False WHERE id = {id} AND chat_id = {chat_id}")
             conn.commit()
             bot.send_chat_action(message.chat.id, "typing")
             sleep(random.randint(2, 7))
@@ -67,10 +67,10 @@ def aboba(message):
             bot.reply_to(message, 'Ты уже просил, я тебя не тегаю')
 
     if "быдлик тегай меня" in text:
-        db_cursor.execute(f"SELECT tag FROM users.user WHERE id = {id}")
+        db_cursor.execute(f"SELECT tag FROM users.user WHERE id = {id} AND chat_id = {chat_id}")
         db_result = db_cursor.fetchone()[0]
         if db_result == False:
-            db_cursor.execute(f"UPDATE users.user SET tag = True WHERE id = {id}")
+            db_cursor.execute(f"UPDATE users.user SET tag = True WHERE id = {id} AND chat_id = {chat_id}")
             conn.commit()
             bot.send_chat_action(message.chat.id, "typing")
             sleep(random.randint(2, 7))
@@ -79,7 +79,6 @@ def aboba(message):
             bot.send_chat_action(message.chat.id, "typing")
             sleep(random.randint(2, 7))
             bot.reply_to(message, 'Я тебя и так тегаю')   
-
             
     
     
