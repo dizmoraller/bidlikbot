@@ -3,6 +3,7 @@ from time import sleep
 import telebot
 import random
 import psycopg2
+from datetime import date
 
 
 conn = psycopg2.connect("postgres://sebpvdyzyozixc:b9fba55dfe23ccfaeb94b7e63799ae220f91af8032e80b1ae15abe348f01adc1@ec2-3-216-113-109.compute-1.amazonaws.com:5432/dc11rfbkcd0v46", sslmode='require')
@@ -80,8 +81,16 @@ def aboba(message):
             sleep(random.randint(2, 7))
             bot.reply_to(message, 'Я тебя и так тегаю')   
             
-    
-    
+    if "быдлик насколько я кринж" in text:
+        current_date = str(date.today())
+        res_date = current_date.replace("-", "")
+        text_user_id = str(id)
+        cringe_seed = res_date + text_user_id
+        random.seed(int(cringe_seed))
+        result = str(random.randrange(1, 100))
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, "Сегодня ты кринжовый на " + result + "%")   
     
     
     
