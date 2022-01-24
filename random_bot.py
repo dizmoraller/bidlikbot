@@ -4,9 +4,11 @@ import telebot
 import random
 import psycopg2
 from datetime import date
+import os
 
 
-conn = psycopg2.connect("postgres://sebpvdyzyozixc:b9fba55dfe23ccfaeb94b7e63799ae220f91af8032e80b1ae15abe348f01adc1@ec2-3-216-113-109.compute-1.amazonaws.com:5432/dc11rfbkcd0v46", sslmode='require')
+DATABASE_URL = os.environ['DATABASE_URL']
+conn = psycopg2.connect(DATABASE_URL, sslmode='require')
 db_cursor = conn.cursor()
 
 
