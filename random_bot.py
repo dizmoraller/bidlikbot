@@ -8,12 +8,32 @@ import os
 
 
 DATABASE_URL = os.environ['DATABASE_URL']
+TOKEN = os.environ['TOKEN']
 conn = psycopg2.connect(DATABASE_URL, sslmode='require')
 db_cursor = conn.cursor()
 
+bot = telebot.TeleBot(TOKEN)
 
-bot = telebot.TeleBot("5011828394:AAHNPKq01NiqzYiXdA4NVgArJMGfkWHXZL4")
 
+days_list = ["день", "дня", "дней"]
+mon_list = ["месяц", "месяца", "месяцев"]
+years_list = ["год", "года", "лет"]
+hours_list = ["час", "часа", "часов"]
+min_list = ["минуту", "минуты", "минут"]
+sec_list = ["секунду", "секунды", "секунд"]
+first_list = ["Никогда", "Завтра", "Потом", "Когда-нибудь", "Сегодня", "Послезавтра", "Скоро", "Сейчас", "Скоро, но это не точно"]
+second_list = [days_list, mon_list, years_list, hours_list, min_list, sec_list]
+when_list = [first_list, second_list]
+
+def when(date_choice, numbers):
+    if numbers % 10 == 1 and numbers != 11:
+        result = "Через" + " " + str(numbers) + " " + date_choice[0]
+    elif 1 < numbers % 10 < 5 and (numbers % 100 < 10 or numbers % 100 >= 20):
+        result = "Через" + " " + str(numbers) + " " + date_choice[1]
+    else:
+        result = "Через" + " " + str(numbers) + " " + date_choice[2]
+    return result
+            
 
 @bot.message_handler(content_types=['text'])
 def aboba(message):
@@ -93,8 +113,22 @@ def aboba(message):
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, "Сегодня ты кринжовый на " + result + "%")   
+
+
+    if "быдлик когда" in text:
+        list_choice = random.choice(when_list)
+        if list_choice == second_list:
+            date_choice = random.choice(second_list)
+            numbers = random.randrange(1, 100)
+            result = when(date_choice, numbers)
     
-    
-    
-    
+        elif list_choice == first_list:
+            result = random.choice(first_list)
+        
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)  
+
+
+
 bot.polling(none_stop=True) 
