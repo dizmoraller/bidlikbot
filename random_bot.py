@@ -74,6 +74,20 @@ def aboba(message):
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
+        
+    if "быдлик у кого" in text:
+        que_s = text.split("кого", 1)
+        que = que_s[1]
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        members = db_cursor.fetchall()
+        select = random.choice(members)
+        result = "У " + select[1] + que
+        if select[2] == True:
+            result = "У " + "@" + select[1] + que
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
+
 
     if "быдлик не тегай меня" in text:
         db_cursor.execute(f"SELECT tag FROM users.user WHERE id = {id} AND chat_id = {chat_id}")
