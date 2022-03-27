@@ -1,0 +1,20 @@
+services:
+  bot:
+    container_name: bidlik
+    build: .
+    restart: always
+    env_file:
+      - .env
+  db:
+    container_name: postgres
+    image: postgres:10-alpine
+    ports: 
+      - "5432:5432"
+    env_file:
+      - .env
+    volumes:
+      - ./init.db:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

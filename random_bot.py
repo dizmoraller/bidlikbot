@@ -7,9 +7,10 @@ from datetime import date
 import os
 
 
-DATABASE_URL = os.environ['DATABASE_URL']
-TOKEN = os.environ['TOKEN']
-conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+DATABASE_URL = os.environ['BOT_DATABASE_URL']
+TOKEN = os.environ['BOT_TOKEN']
+SSLMODE = os.environ['BOT_DATABASE_SSLMODE']
+conn = psycopg2.connect(DATABASE_URL, sslmode=SSLMODE)
 db_cursor = conn.cursor()
 
 bot = telebot.TeleBot(TOKEN)

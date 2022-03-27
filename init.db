@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS users.user;
+DROP DATABASE IF EXISTS users;
+
+CREATE SCHEMA users;
+CREATE TABLE users.user (
+    id		numeric,
+    username	text,
+    chat_id	numeric
+);
