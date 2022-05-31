@@ -5,5 +5,6 @@ CREATE SCHEMA users;
 CREATE TABLE users.user (
     id		numeric,
     username	text,
-    chat_id	numeric
+    chat_id	numeric,
+    tag		boolean,
 );
