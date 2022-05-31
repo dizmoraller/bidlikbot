@@ -44,6 +44,7 @@ def aboba(message):
     members = []
     db_cursor.execute(f"SELECT id, chat_id FROM users.user WHERE id = {id} AND chat_id = {chat_id}")
     db_result = db_cursor.fetchone()
+    uni_que = ""
 
     if not db_result:
         db_cursor.execute("INSERT INTO users.user(id, username, chat_id) VALUES (%s, %s, %s)", (id, username, chat_id))
@@ -117,16 +118,20 @@ def aboba(message):
             sleep(random.randint(2, 7))
             bot.reply_to(message, 'Я тебя и так тегаю')   
             
-    if "быдлик насколько я кринж" in text:
+    if "быдлик насколько я" in text:
+        que_s = text.split("я", 1)
+        que = que_s[1]
+        for i in range(len(que)):
+            uni_que += str(ord(que[i]))
         current_date = str(date.today())
         res_date = current_date.replace("-", "")
         text_user_id = str(id)
-        cringe_seed = res_date + text_user_id
+        cringe_seed = res_date + text_user_id + uni_que
         random.seed(int(cringe_seed))
         result = str(random.randrange(1, 100))
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
-        bot.reply_to(message, "Сегодня ты кринжовый на " + result + "%")   
+        bot.reply_to(message, "Сегодня ты" + que + " " + "на" + " " + result + "%")   
 
 
     if "быдлик когда" in text:
