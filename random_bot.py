@@ -148,44 +148,44 @@ def aboba(message):
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
 
-        if "быдлик кому" in text:
-            que_s = text.split("кому", 1)
-            que = que_s[1]
-            db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
-            members = db_cursor.fetchall()
-            select = random.choice(members)
-            result = select[1] + "'у" + que
-            if select[2] == True:
-                result = "@" + result
-            bot.send_chat_action(message.chat.id, "typing")
-            sleep(random.randint(2, 7))
-            bot.reply_to(message, result)
+    if "быдлик кому" in text:
+        que_s = text.split("кому", 1)
+        que = que_s[1]
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        members = db_cursor.fetchall()
+        select = random.choice(members)
+        result = select[1] + "'у" + que
+        if select[2] == True:
+            result = "@" + result
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
 
-        if "быдлик с кем" in text:
-            que_s = text.split("кем", 1)
-            que = que_s[1]
-            db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
-            members = db_cursor.fetchall()
-            select = random.choice(members)
-            result = "С " + select[1] + "'ом" + que
-            if select[2] == True:
-                result = "С " + "@" + select[1] + "'ом" + que
-            bot.send_chat_action(message.chat.id, "typing")
-            sleep(random.randint(2, 7))
-            bot.reply_to(message, result)
+    if "быдлик с кем" in text:
+        que_s = text.split("кем", 1)
+        que = que_s[1]
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        members = db_cursor.fetchall()
+        select = random.choice(members)
+        result = "С " + select[1] + "'ом" + que
+        if select[2] == True:
+            result = "С " + "@" + select[1] + "'ом" + que
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
 
-        if "быдлик в ком" in text:
-            que_s = text.split("ком", 1)
-            que = que_s[1]
-            db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
-            members = db_cursor.fetchall()
-            select = random.choice(members)
-            result = "В " + select[1] + "'е" + que
-            if select[2] == True:
-                result = "В " + "@" + select[1] + "'е" + que
-            bot.send_chat_action(message.chat.id, "typing")
-            sleep(random.randint(2, 7))
-            bot.reply_to(message, result)
+    if "быдлик в ком" in text:
+        que_s = text.split("ком", 1)
+        que = que_s[1]
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        members = db_cursor.fetchall()
+        select = random.choice(members)
+        result = "В " + select[1] + "'е" + que
+        if select[2] == True:
+            result = "В " + "@" + select[1] + "'е" + que
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
 
 
 bot.polling(none_stop=True) 
