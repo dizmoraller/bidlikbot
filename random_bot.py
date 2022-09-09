@@ -128,7 +128,7 @@ def aboba(message):
         text_user_id = str(id)
         cringe_seed = res_date + text_user_id + uni_que
         random.seed(int(cringe_seed))
-        result = str(random.randrange(1, 100))
+        result = str(random.randrange(1, 100) + 1)
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, "На" + " " + result + "%")
