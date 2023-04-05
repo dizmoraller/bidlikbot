@@ -70,7 +70,7 @@ def aboba(message):
     db_cursor.execute(f"SELECT username FROM users.user WHERE id = {id} AND chat_id = {chat_id}")
     db_result = db_cursor.fetchone()
     if username != db_result:
-        db_cursor.execute(f"UPDATE users.user SET username = {username} WHERE id = {id} AND chat_id = {chat_id}")
+        db_cursor.execute(f"UPDATE users.user SET username = '{username}' WHERE id = {id} AND chat_id = {chat_id}")
 
     if random.randint(1, 50) == 9:
         bot.send_chat_action(message.chat.id, "typing")
