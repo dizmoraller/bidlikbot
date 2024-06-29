@@ -225,7 +225,7 @@ def aboba(message):
         bot.reply_to(message, result)
 
     if "быдлик " and " или " in text:
-        que_s = text.split("быдлик", 1)[1].split("или", 1)
+        que_s = text.split("быдлик", 1)[1].split(" или ", 1)
         result = random.choice(que_s)
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
