@@ -82,7 +82,7 @@ def aboba(message):
     if "быдлик кто" in text:
         que_s = text.split("кто", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
         members = db_cursor.fetchall()
         select = random.choice(members)
         result = select[1] + que
@@ -95,7 +95,7 @@ def aboba(message):
     if "быдлик кого" in text:
         que_s = text.split("кого", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
         members = db_cursor.fetchall()
         select = random.choice(members)
         result = select[1] + "'а" + que
@@ -108,7 +108,7 @@ def aboba(message):
     if "быдлик у кого" in text:
         que_s = text.split("кого", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
         members = db_cursor.fetchall()
         select = random.choice(members)
         result = "У " + select[1] + "'а" + que
@@ -173,7 +173,7 @@ def aboba(message):
     if "быдлик кому" in text:
         que_s = text.split("кому", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
         members = db_cursor.fetchall()
         select = random.choice(members)
         result = select[1] + "'у" + que
@@ -186,7 +186,7 @@ def aboba(message):
     if "быдлик с кем" in text:
         que_s = text.split("кем", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
         members = db_cursor.fetchall()
         select = random.choice(members)
         result = "С " + select[1] + "'ом" + que
@@ -199,7 +199,7 @@ def aboba(message):
     if "быдлик в ком" in text:
         que_s = text.split("ком", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id}")
+        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
         members = db_cursor.fetchall()
         select = random.choice(members)
         result = "В " + select[1] + "'е" + que
