@@ -5,10 +5,12 @@ import random
 import psycopg2
 from datetime import date
 import os
+from grok import request_grok
+
 
 DATABASE_URL = os.environ['DATABASE_URL']
 TOKEN = os.environ['TOKEN']
-conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+conn = psycopg2.connect(DATABASE_URL)
 db_cursor = conn.cursor()
 
 bot = telebot.TeleBot(TOKEN)
@@ -52,12 +54,41 @@ def generate_seed(que, id):
     return seed
 
 
-@bot.message_handler(content_types=['text'])
+
+# def check_db():
+#     try:
+#         db_cursor.execute("DROP TABLE IF EXISTS users.user;")
+#         db_cursor.execute("DROP SCHEMA IF EXISTS users CASCADE;")
+#         db_cursor.execute("CREATE SCHEMA users;")
+#         db_cursor.execute("""
+#             CREATE TABLE users.user (
+#                 id        numeric,
+#                 username  text,
+#                 chat_id   numeric,
+#                 tag       boolean DEFAULT true
+#             );
+#         """)
+#         conn.commit()
+# check_db()
+
+def select_user(que, chat_id):
+    db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
+    members = db_cursor.fetchall()
+    weighted_members = []
+    for m in members:
+        weighted_members.extend([m, m])
+
+    weighted_members.append("bot")
+
+    result = random.choice(weighted_members)
+    return result
+
+@bot.message_handler(content_types=['text', 'photo', 'video'])
 def aboba(message):
     id = message.from_user.id
     username = message.from_user.username
     chat_id = message.chat.id
-    text = message.text.lower()
+    text = (message.text or message.caption or "").lower()
     db_cursor.execute(f"SELECT id, chat_id FROM users.user WHERE id = {id} AND chat_id = {chat_id}")
     db_result = db_cursor.fetchone()
 
@@ -74,18 +105,29 @@ def aboba(message):
     if random.randint(1, 50) == 9:
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
-        bot.reply_to(message, random.choice(prikol_list))
+        if message.content_type == 'photo':
+            prompt = 'фото'
+        elif message.content_type == 'video':
+            prompt = 'видео'
+        else:
+            prompt = text
+
+        answer = request_grok(prompt)
+        if answer is None:
+            answer = random.choice(prikol_list)
+        bot.reply_to(message, answer)
 
 
     if "быдлик кто" in text:
         que_s = text.split("кто", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
-        members = db_cursor.fetchall()
-        select = random.choice(members)
-        result = select[1] + que
-        if select[2]:
-            result = "@" + result
+        select = select_user(que, chat_id)
+        if select == "bot":
+            result = "Быдлик " + que
+        else:
+            result = select[1] + que
+            if select[2]:
+                result = "@" + result
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
@@ -93,12 +135,13 @@ def aboba(message):
     if "быдлик кого" in text:
         que_s = text.split("кого", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
-        members = db_cursor.fetchall()
-        select = random.choice(members)
-        result = select[1] + "'а" + que
-        if select[2]:
-            result = "@" + result
+        select = select_user(que, chat_id)
+        if select == "bot":
+            result = "Быдлик" + "'а" + que
+        else:
+            result = select[1] + "'а" + que
+            if select[2]:
+                result = "@" + result
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
@@ -106,12 +149,13 @@ def aboba(message):
     if "быдлик у кого" in text:
         que_s = text.split("кого", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
-        members = db_cursor.fetchall()
-        select = random.choice(members)
-        result = "У " + select[1] + "'а" + que
-        if select[2]:
-            result = "У " + "@" + select[1] + "'а" + que
+        select = select_user(que, chat_id)
+        if select == "bot":
+            result = "У Быдлика" + "'а" + que
+        else:
+            result = "У " + select[1] + "'а" + que
+            if select[2]:
+                result = "У @" + select[1] + "'а" + que
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
@@ -171,12 +215,13 @@ def aboba(message):
     if "быдлик кому" in text:
         que_s = text.split("кому", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
-        members = db_cursor.fetchall()
-        select = random.choice(members)
-        result = select[1] + "'у" + que
-        if select[2]:
-            result = "@" + result
+        select = select_user(que, chat_id)
+        if select == "bot":
+            result = "Быдлик" + "'у" + que
+        else:
+            result = select[1] + "'у" + que
+            if select[2]:
+                result = "@" + result
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
@@ -184,12 +229,13 @@ def aboba(message):
     if "быдлик с кем" in text:
         que_s = text.split("кем", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
-        members = db_cursor.fetchall()
-        select = random.choice(members)
-        result = "С " + select[1] + "'ом" + que
-        if select[2]:
-            result = "С " + "@" + select[1] + "'ом" + que
+        select = select_user(que, chat_id)
+        if select == "bot":
+            result = "С Быдлик" + "'ом" + que
+        else:
+            result = "С " + select[1] + "'ом" + que
+            if select[2]:
+                result = "С @" + select[1] + "'ом" + que
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
@@ -197,12 +243,93 @@ def aboba(message):
     if "быдлик в ком" in text:
         que_s = text.split("ком", 1)
         que = que_s[1]
-        db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
-        members = db_cursor.fetchall()
-        select = random.choice(members)
-        result = "В " + select[1] + "'е" + que
-        if select[2]:
-            result = "В " + "@" + select[1] + "'е" + que
+        select = select_user(que, chat_id)
+        if select == "bot":
+            result = "В Быдлик" + "'е" + que
+        else:
+            result = "В " + select[1] + "'е" + que
+            if select[2]:
+                result = "В @" + select[1] + "'е" + que
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
+
+    if "быдлик чей" in text:
+        que_s = text.split("чей", 1)
+        que = que_s[1]
+        select = select_user(que, chat_id)
+
+        if select == "bot":
+            result = "Быдлик" + "'a" + que
+        else:
+            result = select[1] + "'a" + que
+            if select[2]:
+                result = "@" + result
+
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
+
+    if "быдлик чьё" in text:
+        que_s = text.split("чьё", 1)
+        que = que_s[1]
+        select = select_user(que, chat_id)
+
+        if select == "bot":
+            result = "Быдлик" + "'a" + que
+        else:
+            result = select[1] + "'a" + que
+            if select[2]:
+                result = "@" + result
+
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
+
+    if "быдлик чья" in text:
+        que_s = text.split("чья", 1)
+        que = que_s[1]
+        select = select_user(que, chat_id)
+
+        if select == "bot":
+            result = "Быдлик" + "'a" + que
+        else:
+            result = select[1] + "'a" + que
+            if select[2]:
+                result = "@" + result
+
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
+
+    if "быдлик чьи" in text:
+        que_s = text.split("чьи", 1)
+        que = que_s[1]
+        select = select_user(que, chat_id)
+
+        if select == "bot":
+            result = "Быдлик" + "'a" + que
+        else:
+            result = select[1] + "'a" + que
+            if select[2]:
+                result = "@" + result
+
+        bot.send_chat_action(message.chat.id, "typing")
+        sleep(random.randint(2, 7))
+        bot.reply_to(message, result)
+
+    if "быдлик кем" in text:
+        que_s = text.split("кем", 1)
+        que = que_s[1]
+        select = select_user(que, chat_id)
+
+        if select == "bot":
+            result = "Быдлик" + "'ом" + que
+        else:
+            result = select[1] + "'ом" + que
+            if select[2]:
+                result = "@" + result
+
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
@@ -222,9 +349,13 @@ def aboba(message):
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
 
-    if "быдлик " and " или " in text:
-        que_s = text.split("быдлик", 1)[1].split(" или ", 1)
+    if "быдлик " in text and " или " in text:
+        que_s = text.split("быдлик", 1)[1].split(" или ")
+        if not que_s[0].strip():
+            que_s = que_s[1:]
+
         result = random.choice(que_s)
+
         bot.send_chat_action(message.chat.id, "typing")
         sleep(random.randint(2, 7))
         bot.reply_to(message, result)
