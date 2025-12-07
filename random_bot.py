@@ -10,7 +10,7 @@ from grok import request_grok
 
 DATABASE_URL = os.environ['DATABASE_URL']
 TOKEN = os.environ['TOKEN']
-conn = psycopg2.connect(DATABASE_URL)
+conn = psycopg2.connect(DATABASE_URL, sslmode='require')
 db_cursor = conn.cursor()
 
 bot = telebot.TeleBot(TOKEN)
@@ -71,7 +71,7 @@ def generate_seed(que, id):
 #         conn.commit()
 # check_db()
 
-def select_user(que, chat_id):
+def select_user(chat_id):
     db_cursor.execute(f"SELECT id, username, tag, chat_id FROM users.user WHERE chat_id = {chat_id} AND tag = True")
     members = db_cursor.fetchall()
     weighted_members = []
@@ -121,7 +121,7 @@ def aboba(message):
     if "быдлик кто" in text:
         que_s = text.split("кто", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
         if select == "bot":
             result = "Быдлик " + que
         else:
@@ -135,7 +135,7 @@ def aboba(message):
     if "быдлик кого" in text:
         que_s = text.split("кого", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
         if select == "bot":
             result = "Быдлик" + "'а" + que
         else:
@@ -149,7 +149,7 @@ def aboba(message):
     if "быдлик у кого" in text:
         que_s = text.split("кого", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
         if select == "bot":
             result = "У Быдлика" + "'а" + que
         else:
@@ -215,7 +215,7 @@ def aboba(message):
     if "быдлик кому" in text:
         que_s = text.split("кому", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
         if select == "bot":
             result = "Быдлик" + "'у" + que
         else:
@@ -229,7 +229,7 @@ def aboba(message):
     if "быдлик с кем" in text:
         que_s = text.split("кем", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
         if select == "bot":
             result = "С Быдлик" + "'ом" + que
         else:
@@ -243,7 +243,7 @@ def aboba(message):
     if "быдлик в ком" in text:
         que_s = text.split("ком", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
         if select == "bot":
             result = "В Быдлик" + "'е" + que
         else:
@@ -257,7 +257,7 @@ def aboba(message):
     if "быдлик чей" in text:
         que_s = text.split("чей", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
 
         if select == "bot":
             result = "Быдлик" + "'a" + que
@@ -273,7 +273,7 @@ def aboba(message):
     if "быдлик чьё" in text:
         que_s = text.split("чьё", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
 
         if select == "bot":
             result = "Быдлик" + "'a" + que
@@ -289,7 +289,7 @@ def aboba(message):
     if "быдлик чья" in text:
         que_s = text.split("чья", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
 
         if select == "bot":
             result = "Быдлик" + "'a" + que
@@ -305,7 +305,7 @@ def aboba(message):
     if "быдлик чьи" in text:
         que_s = text.split("чьи", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
 
         if select == "bot":
             result = "Быдлик" + "'a" + que
@@ -321,7 +321,7 @@ def aboba(message):
     if "быдлик кем" in text:
         que_s = text.split("кем", 1)
         que = que_s[1]
-        select = select_user(que, chat_id)
+        select = select_user(chat_id)
 
         if select == "bot":
             result = "Быдлик" + "'ом" + que
