@@ -6,11 +6,12 @@ import psycopg2
 from datetime import date
 import os
 from grok import request_grok
-
+from dotenv import load_dotenv
+load_dotenv()
 
 DATABASE_URL = os.environ['DATABASE_URL']
 TOKEN = os.environ['TOKEN']
-conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+conn = psycopg2.connect(DATABASE_URL)
 db_cursor = conn.cursor()
 
 bot = telebot.TeleBot(TOKEN)
@@ -123,7 +124,7 @@ def aboba(message):
         que = que_s[1]
         select = select_user(chat_id)
         if select == "bot":
-            result = "Быдлик " + que
+            result = "Быдлик" + que
         else:
             result = select[1] + que
             if select[2]:
