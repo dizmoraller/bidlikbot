@@ -1,4 +1,5 @@
 from openai import OpenAI
+import os
 
 LLM_BASE_URL = os.environ['LLM_BASE_URL']
 
