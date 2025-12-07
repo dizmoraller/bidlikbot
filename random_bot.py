@@ -6,12 +6,10 @@ import psycopg2
 from datetime import date
 import os
 from grok import request_grok
-from dotenv import load_dotenv
-load_dotenv()
 
 DATABASE_URL = os.environ['DATABASE_URL']
 TOKEN = os.environ['TOKEN']
-conn = psycopg2.connect(DATABASE_URL)
+conn = psycopg2.connect(DATABASE_URL, sslmode='require')
 db_cursor = conn.cursor()
 
 bot = telebot.TeleBot(TOKEN)
