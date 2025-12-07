@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
   db:
     container_name: postgres
     image: postgres:10-alpine

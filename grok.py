@@ -2,7 +2,7 @@ from openai import OpenAI
 def request_grok(user_message):
     # Настраиваем клиент на локальный адрес
     client = OpenAI(
-        base_url="http://localhost:8000/v1",
+        base_url="http://host.containers.internal:8000/v1",
         api_key="unused"  # Заглушка, так как ключ проверяется внутри сервера через cookie
     )
 
