@@ -7,8 +7,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    extra_hosts:
-      - "host.containers.internal:host-gateway"
+    networks:
+      - default
+      - bidlik-net
+
   db:
     container_name: postgres
     image: postgres:10-alpine
@@ -22,3 +24,7 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  bidlik-net:
+    name: bidlik-net
