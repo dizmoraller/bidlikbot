@@ -48,6 +48,7 @@ class Database:
         self._connection = connection
         self._cursor = connection.cursor()
         self._ensure_user_admin_column()
+        self._ensure_user_unique_constraint()
         self._ensure_question_templates_table()
         self._ensure_settings_table()
         self._ensure_chat_settings_table()
@@ -61,21 +62,15 @@ class Database:
         return cls(connection)
 
     def ensure_user(self, user_id: int, username: str, chat_id: int) -> None:
-        user = self.get_user(user_id, chat_id)
-        if user is None:
-            self._cursor.execute(
-                "INSERT INTO users.user(id, username, chat_id) VALUES (%s, %s, %s)",
-                (user_id, username, chat_id),
-            )
-            self._connection.commit()
-            return
-
-        if user.username != username:
-            self._cursor.execute(
-                "UPDATE users.user SET username = %s WHERE id = %s AND chat_id = %s",
-                (username, user_id, chat_id),
-            )
-            self._connection.commit()
+        self._cursor.execute(
+            """
+            INSERT INTO users.user (id, username, chat_id)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (id, chat_id) DO UPDATE SET username = EXCLUDED.username
+            """,
+            (user_id, username, chat_id),
+        )
+        self._connection.commit()
 
     def get_user(self, user_id: int, chat_id: int) -> Optional[UserRecord]:
         self._cursor.execute(
@@ -522,6 +517,36 @@ class Database:
         )
         self._cursor.execute(
             "UPDATE users.user SET is_admin = FALSE WHERE is_admin IS NULL"
+        )
+        self._connection.commit()
+
+    def _ensure_user_unique_constraint(self) -> None:
+        self._cursor.execute(
+            """
+            DELETE FROM users."user" a
+            USING users."user" b
+            WHERE a.ctid < b.ctid
+              AND a.id = b.id
+              AND a.chat_id = b.chat_id
+            """
+        )
+        self._connection.commit()
+        self._cursor.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.table_constraints
+                    WHERE table_schema = 'users'
+                      AND table_name = 'user'
+                      AND constraint_name = 'user_pk'
+                ) THEN
+                    ALTER TABLE users."user"
+                    ADD CONSTRAINT user_pk PRIMARY KEY (id, chat_id);
+                END IF;
+            END $$;
+            """
         )
         self._connection.commit()
 
