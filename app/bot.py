@@ -64,7 +64,7 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
         if insult_level <= 1:
             insult_probability = 0.0
         if "быдлик" in text and question_match is None and insult_probability > 0:
-            boost = db.get_insult_boost_multiplier()
+            boost = db.get_insult_boost_multiplier(scope_for_settings)
             insult_probability = min(1.0, insult_probability * boost)
 
         if insult_probability > 0 and random.random() < insult_probability:
@@ -258,11 +258,15 @@ def _handle_admin_commands(
         return True
 
     if text.startswith("быдлик множитель оскорбления"):
-        if not admin_service.is_admin(user_id):
-            reply_with_typing(bot, message, "Только администраторы могут обновлять множитель")
+        if is_private_chat and not is_global_admin:
+            reply_with_typing(bot, message, "Глобальный множитель оскорбления может менять только глобальный администратор")
             return True
 
-        payload = text.split("быдлик множитель оскорбления", 1)[1].strip()
+        if not is_private_chat and not (is_global_admin or has_chat_admin_rights):
+            reply_with_typing(bot, message, "Только администратор чата может менять множитель в этом чате")
+            return True
+
+        payload = _extract_payload(raw_text, "быдлик множитель оскорбления")
         try:
             value = float(payload.strip())
         except ValueError:
@@ -270,8 +274,17 @@ def _handle_admin_commands(
             return True
 
         clamped_value = max(1.0, value)
-        db.set_insult_boost_multiplier(clamped_value)
-        reply_with_typing(bot, message, f"Множитель оскорбления обновлён до {clamped_value:.2f}")
+        target_chat_id = None if is_private_chat else chat_id
+        db.set_insult_boost_multiplier(clamped_value, target_chat_id)
+        if target_chat_id is None:
+            reply_with_typing(bot, message, f"Глобальный множитель оскорбления обновлён до {clamped_value:.2f}")
+        else:
+            reply_with_typing(bot, message, f"Множитель оскорбления в этом чате обновлён до {clamped_value:.2f}")
+        return True
+
+    if text.startswith("быдлик настройки"):
+        target_chat_id = chat_id if not is_private_chat else None
+        reply_with_typing(bot, message, _build_settings_summary(db, target_chat_id))
         return True
 
     if text.startswith("быдлик команды"):
@@ -293,6 +306,7 @@ def _handle_admin_commands(
             return True
 
         chat_users = db.get_chat_users(chat_id)
+        chat_admin_ids = db.get_chat_admin_ids(chat_id)
         if not chat_users:
             reply_with_typing(bot, message, "Нет данных о пользователях этого чата")
             return True
@@ -301,7 +315,13 @@ def _handle_admin_commands(
         for user in chat_users:
             status = "тегаю" if user.tag else "не тегаю"
             display_name = user.username or str(user.id)
-            lines.append(f"{display_name} — {status}")
+            labels = []
+            if user.is_admin:
+                labels.append("глоб. админ")
+            if user.id in chat_admin_ids:
+                labels.append("админ чата")
+            extra = f" ({', '.join(labels)})" if labels else ""
+            lines.append(f"{display_name} — {status}{extra}")
         reply_with_typing(bot, message, "\n".join(lines))
         return True
     if text.startswith("быдлик тегай") or text.startswith("быдлик не тегай"):
@@ -533,6 +553,7 @@ def _build_help_message(db: Database, chat_id: Optional[int]) -> str:
     commands = [
         "Быдлик когда/сколько/насколько/... — развлечения и рандомные ответы",
         "Быдлик тегай меня / Быдлик не тегай меня — управлять собственным тегом",
+        "Быдлик настройки — текущее состояние оскорблений",
         "Быдлик команды — эта справка",
     ]
     triggers = db.get_question_triggers(chat_id if chat_id is not None else None)
@@ -541,12 +562,43 @@ def _build_help_message(db: Database, chat_id: Optional[int]) -> str:
     return "Доступные команды:\n" + "\n".join(commands)
 
 
+def _build_settings_summary(db: Database, chat_id: Optional[int]) -> str:
+    def format_percent(value: float) -> str:
+        return f"{value * 100:.2f}%"
+
+    lines = [
+        "Глобальные настройки:",
+        f"- Шанс оскорбления: {format_percent(db.get_insult_probability())}",
+        f"- Уровень оскорблений: {db.get_insult_level()}",
+        f"- Множитель шанса: {db.get_insult_boost_multiplier():.2f}",
+    ]
+
+    if chat_id is not None:
+        chat_probability = db.get_insult_probability(chat_id)
+        chat_level = db.get_insult_level(chat_id)
+        chat_multiplier = db.get_insult_boost_multiplier(chat_id)
+        override_probability, override_level, override_multiplier = db.get_chat_insult_overrides(chat_id)
+        chat_lines = [
+            "",
+            "Настройки этого чата:",
+            f"- Шанс оскорбления: {format_percent(chat_probability)} "
+            + ("(локально)" if override_probability is not None else "(глобально)"),
+            f"- Уровень оскорблений: {chat_level} "
+            + ("(локально)" if override_level is not None else "(глобально)"),
+            f"- Множитель шанса: {chat_multiplier:.2f} "
+            + ("(локально)" if override_multiplier is not None else "(глобально)"),
+        ]
+        lines.extend(chat_lines)
+
+    return "\n".join(lines)
+
+
 def _build_admin_help_message() -> str:
     commands = [
         "Быдлик добавь вопрос триггер|ответ — добавить вопрос (локально в чате). Используй {mention} и {question}",
         "Быдлик шанс оскорбления X — шанс оскорбления % (глобально в личке, локально в чате)",
         "Быдлик уровень оскорблений 1-4 — изменить уровень оскорблений",
-        "Быдлик множитель оскорбления X — глобальный множитель шанса",
+        "Быдлик множитель оскорбления X — множитель шанса (глобально в личке, локально в чате)",
         "Быдлик сделай админом @user / Быдлик убери админа @user",
         "Быдлик бан @user 10м / Быдлик разбан @user",
         "Быдлик покажи юзеров — список пользователей/тегов",

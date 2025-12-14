@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple, Set
 
 import psycopg2
 
@@ -198,7 +198,15 @@ class Database:
         )
         self._connection.commit()
 
-    def get_insult_boost_multiplier(self) -> float:
+    def get_insult_boost_multiplier(self, chat_id: Optional[int] = None) -> float:
+        if chat_id is not None:
+            chat_value = self._get_chat_setting(chat_id, INSULT_BOOST_KEY)
+            if chat_value is not None:
+                try:
+                    return max(1.0, float(chat_value))
+                except (TypeError, ValueError):
+                    pass
+
         self._cursor.execute(
             "SELECT value FROM users.bot_settings WHERE key = %s",
             (INSULT_BOOST_KEY,),
@@ -211,8 +219,12 @@ class Database:
         except (TypeError, ValueError):
             return DEFAULT_INSULT_BOOST
 
-    def set_insult_boost_multiplier(self, multiplier: float) -> None:
+    def set_insult_boost_multiplier(self, multiplier: float, chat_id: Optional[int] = None) -> None:
         multiplier = max(1.0, multiplier)
+        if chat_id is not None:
+            self._set_chat_setting(chat_id, INSULT_BOOST_KEY, str(multiplier))
+            return
+
         self._cursor.execute(
             """
             INSERT INTO users.bot_settings (key, value)
@@ -261,6 +273,30 @@ class Database:
         )
         self._connection.commit()
 
+    def get_chat_insult_overrides(self, chat_id: int) -> Tuple[Optional[float], Optional[int], Optional[float]]:
+        raw_probability = self._get_chat_setting(chat_id, INSULT_PROBABILITY_KEY)
+        raw_level = self._get_chat_setting(chat_id, INSULT_LEVEL_KEY)
+        raw_multiplier = self._get_chat_setting(chat_id, INSULT_BOOST_KEY)
+        probability = None
+        level = None
+        multiplier = None
+        if raw_probability is not None:
+            try:
+                probability = float(raw_probability)
+            except (TypeError, ValueError):
+                probability = None
+        if raw_level is not None:
+            try:
+                level = int(raw_level)
+            except (TypeError, ValueError):
+                level = None
+        if raw_multiplier is not None:
+            try:
+                multiplier = max(1.0, float(raw_multiplier))
+            except (TypeError, ValueError):
+                multiplier = None
+        return probability, level, multiplier
+
     def is_user_admin(self, user_id: int) -> bool:
         self._cursor.execute(
             "SELECT COALESCE(bool_or(is_admin), FALSE) FROM users.user WHERE id = %s",
@@ -300,6 +336,14 @@ class Database:
             (user_id, chat_id),
         )
         return self._cursor.fetchone() is not None
+
+    def get_chat_admin_ids(self, chat_id: int) -> Set[int]:
+        self._cursor.execute(
+            "SELECT user_id FROM users.chat_admins WHERE chat_id = %s",
+            (chat_id,),
+        )
+        rows = self._cursor.fetchall() or []
+        return {row[0] for row in rows if row and row[0] is not None}
 
     def add_chat_ban(self, user_id: int, chat_id: int, banned_until: Optional[datetime]) -> None:
         value = (
