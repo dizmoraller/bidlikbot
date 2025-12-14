@@ -1,0 +1,96 @@
+import random
+import re
+from datetime import date
+from time import sleep
+from typing import Union
+
+from telebot import TeleBot
+
+from app.db import Database, QuestionTemplate, UserRecord
+
+
+def when(date_choice, numbers):
+    if numbers % 10 == 1 and numbers != 11:
+        result = "Через" + " " + str(numbers) + " " + date_choice[0]
+    elif 1 < numbers % 10 < 5 and (numbers % 100 < 10 or numbers % 100 >= 20):
+        result = "Через" + " " + str(numbers) + " " + date_choice[1]
+    else:
+        result = "Через" + " " + str(numbers) + " " + date_choice[2]
+    return result
+
+
+def generate_seed(que, user_id):
+    uni_que = ""
+    for i in range(len(que)):
+        uni_que += str(ord(que[i]))
+    current_date = str(date.today())
+    res_date = current_date.replace("-", "")
+    text_user_id = str(user_id)
+    seed = res_date + text_user_id + uni_que
+    return seed
+
+
+def select_user(db: Database, chat_id: int) -> Union[UserRecord, str]:
+    members = db.get_tagged_users(chat_id)
+    weighted_members: list[Union[UserRecord, str]] = []
+    for member in members:
+        weighted_members.extend([member, member])
+    weighted_members.append("bot")
+    return random.choice(weighted_members)
+
+
+def reply_with_typing(bot: TeleBot, message, text: str) -> None:
+    bot.send_chat_action(message.chat.id, "typing")
+    sleep(random.randint(2, 7))
+    bot.reply_to(message, text)
+
+
+def handle_question_templates(
+    bot: TeleBot,
+    message,
+    text: str,
+    chat_id: int,
+    db: Database,
+    templates: list[QuestionTemplate] | None = None,
+    match: tuple[QuestionTemplate, str] | None = None,
+) -> bool:
+    templates = templates or db.get_question_templates()
+    match = match or find_question_match(text, templates)
+    if not match:
+        return False
+    template, question_tail = match
+    selected = select_user(db, chat_id)
+    response = format_question_response(selected, template.response_template, question_tail)
+    reply_with_typing(bot, message, response)
+    return True
+
+
+def find_question_match(
+    text: str, templates: list[QuestionTemplate]
+) -> tuple[QuestionTemplate, str] | None:
+    for template in templates:
+        keyword = f"быдлик {template.trigger_text}"
+        start_index = text.find(keyword)
+        if start_index == -1:
+            continue
+        question_tail = text[start_index + len(keyword) :]
+        return template, question_tail
+    return None
+
+
+def format_question_response(
+    selected: Union[UserRecord, str], template: str, question_tail: str
+) -> str:
+    mention = "Быдлик"
+
+    if selected != "bot":
+        mention = selected.username or ""
+        if mention and selected.tag:
+            mention = f"@{mention}"
+
+    normalized_question = question_tail.strip()
+    if normalized_question:
+        normalized_question = f" {normalized_question}"
+
+    response = template.format(mention=mention, question=normalized_question)
+    return re.sub(r"[ ]{2,}", " ", response)
