@@ -85,6 +85,7 @@ class LLM:
 
     def get_tokens_status(self) -> Optional[dict]:
         session_token = self._get_session_token()
+        print(f"Session token: {session_token}")
         if not session_token:
             return None
         url = self._build_tokens_url()
@@ -107,19 +108,21 @@ class LLM:
         heavy_unlimited = False
 
         for token in tokens:
-            remaining = token.get("remaining_queries")
+            remaining = token.get("remaining_requests")
+            if remaining is None:
+                remaining = token.get("remaining_queries")
             heavy_remaining = token.get("heavy_remaining_queries")
             if isinstance(remaining, int) and remaining >= 0:
                 total_remaining += remaining
             else:
-                remaining = None
+                remaining = 0
             if isinstance(heavy_remaining, int):
                 if heavy_remaining < 0:
                     heavy_unlimited = True
                 else:
                     total_heavy += heavy_remaining
             else:
-                heavy_remaining = None
+                heavy_remaining = 0
 
             parsed.append(
                 {
@@ -128,6 +131,7 @@ class LLM:
                 }
             )
 
+        print(f"Remaining requests: {total_remaining}")
         return {
             "total": len(tokens),
             "total_remaining": total_remaining,

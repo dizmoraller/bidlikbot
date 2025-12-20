@@ -131,6 +131,7 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
             text,
             chat_id,
             db,
+            user_id=user_id,
             templates=question_templates,
             match=question_match,
             phrase_chance=question_phrase_chance,
@@ -176,19 +177,6 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
                 date_choice = random.choice(TIME_UNIT_OPTIONS)
                 numbers = random.randrange(1, 100)
                 result = when(date_choice, numbers)
-            send_reply(bot, message, result)
-
-        if "быдлик сколько" in text:
-            que_s = text.split("сколько", 1)
-            que = que_s[1]
-            seed = generate_seed(que, user_id)
-            random.seed(int(seed))
-            if random.randint(1, 2) == 1:
-                seed = generate_seed(que, user_id)
-                random.seed(int(seed))
-                result = str(random.randrange(1, 100) + 1)
-            else:
-                result = random.choice(QUANTITY_RESPONSES)
             send_reply(bot, message, result)
 
         if "быдлик " in text and " или " in text:
