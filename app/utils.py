@@ -52,6 +52,7 @@ def handle_question_templates(
     text: str,
     chat_id: int,
     db: Database,
+    user_id: int | None = None,
     templates: list[QuestionTemplate] | None = None,
     match: tuple[QuestionTemplate, str] | None = None,
     phrase_chance: float = 0.0,
@@ -64,12 +65,18 @@ def handle_question_templates(
         return False
     template, question_tail = match
     selected = select_user(db, chat_id)
+    rng = None
+    if user_id is not None and ("{number}" in template.response_template or "{percent}" in template.response_template):
+        seed = generate_seed(question_tail, user_id)
+        rng = random.Random(int(seed))
+
     response = format_question_response(
         selected,
         template.response_template,
         question_tail,
         phrase_chance=phrase_chance,
         phrase_responses=phrase_responses,
+        rng=rng,
     )
     reply_func(bot, message, response)
     return True
@@ -94,6 +101,7 @@ def format_question_response(
     question_tail: str,
     phrase_chance: float = 0.0,
     phrase_responses: list[str] | None = None,
+    rng: random.Random | None = None,
 ) -> str:
     mention = "Быдлик"
 
@@ -106,15 +114,16 @@ def format_question_response(
     if normalized_question:
         normalized_question = f" {normalized_question}"
 
-    number = random.randint(1, 100)
+    rng = rng or random
+    number = rng.randint(1, 100)
     phrase_responses = phrase_responses or QUANTITY_RESPONSES
     use_phrase = (
         phrase_chance > 0
         and ("{number}" in template or "{percent}" in template)
-        and random.random() < phrase_chance
+        and rng.random() < phrase_chance
     )
     if use_phrase:
-        phrase = random.choice(phrase_responses)
+        phrase = rng.choice(phrase_responses)
         number_value = phrase
         percent_value = phrase
     else:

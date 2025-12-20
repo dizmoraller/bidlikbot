@@ -28,6 +28,7 @@ DEFAULT_QUESTION_TEMPLATES = [
     ("чьё", "{mention}'а{question}"),
     ("чья", "{mention}'а{question}"),
     ("чьи", "{mention}'а{question}"),
+    ("сколько", "{number}"),
 ]
 
 
