@@ -12,6 +12,10 @@ INSULT_BOOST_KEY = "insult_boost_multiplier"
 DEFAULT_INSULT_BOOST = 2.0
 INSULT_LEVEL_KEY = "insult_level"
 DEFAULT_INSULT_LEVEL = 4
+QUESTION_PHRASE_CHANCE_KEY = "question_phrase_chance"
+DEFAULT_QUESTION_PHRASE_CHANCE = 0.5
+WHEN_PHRASE_CHANCE_KEY = "when_phrase_chance"
+DEFAULT_WHEN_PHRASE_CHANCE = 0.5
 DEFAULT_QUESTION_TEMPLATES = [
     ("кто", "{mention}{question}"),
     ("кого", "{mention}'а{question}"),
@@ -155,6 +159,18 @@ class Database:
         )
         self._connection.commit()
 
+    def delete_question_template(self, chat_id: int, trigger_text: str) -> bool:
+        self._cursor.execute(
+            """
+            DELETE FROM users.question_templates
+            WHERE chat_id = %s AND trigger_text = %s
+            """,
+            (chat_id, trigger_text),
+        )
+        deleted = self._cursor.rowcount > 0
+        self._connection.commit()
+        return deleted
+
     def get_insult_probability(self, chat_id: Optional[int] = None) -> float:
         if chat_id is not None:
             chat_value = self._get_chat_setting(chat_id, INSULT_PROBABILITY_KEY)
@@ -253,6 +269,48 @@ class Database:
         except (TypeError, ValueError):
             return DEFAULT_INSULT_LEVEL
 
+    def get_question_phrase_chance(self, chat_id: Optional[int] = None) -> float:
+        if chat_id is not None:
+            chat_value = self._get_chat_setting(chat_id, QUESTION_PHRASE_CHANCE_KEY)
+            if chat_value is not None:
+                try:
+                    return max(0.0, min(1.0, float(chat_value)))
+                except (TypeError, ValueError):
+                    pass
+
+        self._cursor.execute(
+            "SELECT value FROM users.bot_settings WHERE key = %s",
+            (QUESTION_PHRASE_CHANCE_KEY,),
+        )
+        row = self._cursor.fetchone()
+        if not row:
+            return DEFAULT_QUESTION_PHRASE_CHANCE
+        try:
+            return max(0.0, min(1.0, float(row[0])))
+        except (TypeError, ValueError):
+            return DEFAULT_QUESTION_PHRASE_CHANCE
+
+    def get_when_phrase_chance(self, chat_id: Optional[int] = None) -> float:
+        if chat_id is not None:
+            chat_value = self._get_chat_setting(chat_id, WHEN_PHRASE_CHANCE_KEY)
+            if chat_value is not None:
+                try:
+                    return max(0.0, min(1.0, float(chat_value)))
+                except (TypeError, ValueError):
+                    pass
+
+        self._cursor.execute(
+            "SELECT value FROM users.bot_settings WHERE key = %s",
+            (WHEN_PHRASE_CHANCE_KEY,),
+        )
+        row = self._cursor.fetchone()
+        if not row:
+            return DEFAULT_WHEN_PHRASE_CHANCE
+        try:
+            return max(0.0, min(1.0, float(row[0])))
+        except (TypeError, ValueError):
+            return DEFAULT_WHEN_PHRASE_CHANCE
+
     def set_insult_level(self, level: int, chat_id: Optional[int] = None) -> None:
         if chat_id is not None:
             self._set_chat_setting(chat_id, INSULT_LEVEL_KEY, str(level))
@@ -265,6 +323,38 @@ class Database:
             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
             """,
             (INSULT_LEVEL_KEY, str(level)),
+        )
+        self._connection.commit()
+
+    def set_question_phrase_chance(self, chance: float, chat_id: Optional[int] = None) -> None:
+        chance = max(0.0, min(1.0, chance))
+        if chat_id is not None:
+            self._set_chat_setting(chat_id, QUESTION_PHRASE_CHANCE_KEY, str(chance))
+            return
+
+        self._cursor.execute(
+            """
+            INSERT INTO users.bot_settings (key, value)
+            VALUES (%s, %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            """,
+            (QUESTION_PHRASE_CHANCE_KEY, str(chance)),
+        )
+        self._connection.commit()
+
+    def set_when_phrase_chance(self, chance: float, chat_id: Optional[int] = None) -> None:
+        chance = max(0.0, min(1.0, chance))
+        if chat_id is not None:
+            self._set_chat_setting(chat_id, WHEN_PHRASE_CHANCE_KEY, str(chance))
+            return
+
+        self._cursor.execute(
+            """
+            INSERT INTO users.bot_settings (key, value)
+            VALUES (%s, %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            """,
+            (WHEN_PHRASE_CHANCE_KEY, str(chance)),
         )
         self._connection.commit()
 
@@ -291,6 +381,24 @@ class Database:
             except (TypeError, ValueError):
                 multiplier = None
         return probability, level, multiplier
+
+    def get_chat_question_phrase_override(self, chat_id: int) -> Optional[float]:
+        raw_value = self._get_chat_setting(chat_id, QUESTION_PHRASE_CHANCE_KEY)
+        if raw_value is None:
+            return None
+        try:
+            return max(0.0, min(1.0, float(raw_value)))
+        except (TypeError, ValueError):
+            return None
+
+    def get_chat_when_phrase_override(self, chat_id: int) -> Optional[float]:
+        raw_value = self._get_chat_setting(chat_id, WHEN_PHRASE_CHANCE_KEY)
+        if raw_value is None:
+            return None
+        try:
+            return max(0.0, min(1.0, float(raw_value)))
+        except (TypeError, ValueError):
+            return None
 
     def is_user_admin(self, user_id: int) -> bool:
         self._cursor.execute(

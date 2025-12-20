@@ -7,6 +7,7 @@ from typing import Union
 from telebot import TeleBot
 
 from app.db import Database, QuestionTemplate, UserRecord
+from app.texts import QUANTITY_RESPONSES
 
 
 def when(date_choice, numbers):
@@ -53,6 +54,9 @@ def handle_question_templates(
     db: Database,
     templates: list[QuestionTemplate] | None = None,
     match: tuple[QuestionTemplate, str] | None = None,
+    phrase_chance: float = 0.0,
+    phrase_responses: list[str] | None = None,
+    reply_func=reply_with_typing,
 ) -> bool:
     templates = templates or db.get_question_templates()
     match = match or find_question_match(text, templates)
@@ -60,8 +64,14 @@ def handle_question_templates(
         return False
     template, question_tail = match
     selected = select_user(db, chat_id)
-    response = format_question_response(selected, template.response_template, question_tail)
-    reply_with_typing(bot, message, response)
+    response = format_question_response(
+        selected,
+        template.response_template,
+        question_tail,
+        phrase_chance=phrase_chance,
+        phrase_responses=phrase_responses,
+    )
+    reply_func(bot, message, response)
     return True
 
 
@@ -79,7 +89,11 @@ def find_question_match(
 
 
 def format_question_response(
-    selected: Union[UserRecord, str], template: str, question_tail: str
+    selected: Union[UserRecord, str],
+    template: str,
+    question_tail: str,
+    phrase_chance: float = 0.0,
+    phrase_responses: list[str] | None = None,
 ) -> str:
     mention = "Быдлик"
 
@@ -92,5 +106,24 @@ def format_question_response(
     if normalized_question:
         normalized_question = f" {normalized_question}"
 
-    response = template.format(mention=mention, question=normalized_question)
+    number = random.randint(1, 100)
+    phrase_responses = phrase_responses or QUANTITY_RESPONSES
+    use_phrase = (
+        phrase_chance > 0
+        and ("{number}" in template or "{percent}" in template)
+        and random.random() < phrase_chance
+    )
+    if use_phrase:
+        phrase = random.choice(phrase_responses)
+        number_value = phrase
+        percent_value = phrase
+    else:
+        number_value = number
+        percent_value = f"{number}%"
+    response = template.format(
+        mention=mention,
+        question=normalized_question,
+        number=number_value,
+        percent=percent_value,
+    )
     return re.sub(r"[ ]{2,}", " ", response)
