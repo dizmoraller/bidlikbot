@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from typing import List, Optional
 from urllib import request
 
@@ -35,6 +36,20 @@ INSULT_PROMPTS = {
     ),
 }
 
+APRIL_FOOLS_PROMPT = (
+    "Ты — телеграм-бот по имени Быдлик. Это твоё имя, никогда не используй его как обращение к пользователю. "
+    "Сегодня 1 апреля, поэтому вместо оскорблений ты должен отвечать чрезмерно доброжелательно, приторно и "
+    "настолько мило, что это выглядело неловко и кринжово. "
+    "Никакой агрессии, никакого мата, никаких подколов. "
+    "Перехваливай пользователя слишком сильно, неестественно и с перебором. "
+    "Ответ должен быть коротким и звучать так, будто тебя переклинило на чрезмерной доброте. "
+    "Можешь опираться на последние сообщения в чате или на текущее сообщение пользователя. "
+    "Не добавляй пояснений или вступлений. "
+    "История чата:\n{history}\n"
+    "Сообщение пользователя {user_name}: {user_message}\n"
+    "Важно: напиши только сам ответ."
+)
+
 
 class LLM:
     def __init__(
@@ -56,7 +71,7 @@ class LLM:
     def generate_insult(
         self, user_name: str, user_message: str, insult_level: int, history: List[str]
     ) -> Optional[str]:
-        prompt_template = INSULT_PROMPTS.get(insult_level)
+        prompt_template = self._get_prompt_template(insult_level)
         if not prompt_template:
             return None
 
@@ -82,6 +97,12 @@ class LLM:
         except Exception as exc:
             print(f"Ошибка: {exc}")
             return None
+
+    def _get_prompt_template(self, insult_level: int) -> Optional[str]:
+        today = date.today()
+        if today.month == 4 and today.day == 1:
+            return APRIL_FOOLS_PROMPT
+        return INSULT_PROMPTS.get(insult_level)
 
     def get_tokens_status(self) -> Optional[dict]:
         session_token = self._get_session_token()
