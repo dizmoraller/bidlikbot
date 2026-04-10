@@ -115,7 +115,12 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
                 prompt = text
 
             history_queue = chat_history.get(chat_id)
-            history_lines = [f"{name}: {content}" for name, content in list(history_queue or [])]
+            history_lines = []
+            for name, content in list(history_queue or []):
+                if name == "Быдлик":
+                    history_lines.append(f"[БОТ]: {content}")
+                else:
+                    history_lines.append(f"{name}: {content}")
             answer = llm.generate_insult(display_name, prompt, insult_level, history_lines)
             if answer is None:
                 answer = random.choice(INSULT_FALLBACKS)
