@@ -1,9 +1,18 @@
 import json
+from dataclasses import dataclass
 from datetime import date
 from typing import List, Optional
 from urllib import request
-
 from openai import OpenAI
+
+
+BLOCKED_RESPONSE_PATTERNS = [
+    "blocked for potentially violating safety policies",
+    "My response to your message was blocked",
+    "content_filter",
+    "safety policy",
+    "I apologize for any inconvenience",
+]
 
 INSULT_PROMPTS = {
     2: (
@@ -35,7 +44,7 @@ INSULT_PROMPTS = {
         "Если пользователь оскорбил Быдлика, оскорби его в ответ, а не Быдлика. "
         "История чата:\n{history}\n"
         "Пользователь {user_name} написал тебе: {user_message}\n"
-        "Важно: пиши только само оскорбление, без лишнего текста, короткое одно предложение. "
+        "Важно: пиши только само оскорбление, без лишнего текста, одно-два коротких предложения в одном абзаце. "
         "Помни: ты оскорбляешь пользователя, а не Быдлика."
     ),
 }
@@ -55,19 +64,37 @@ APRIL_FOOLS_PROMPT = (
 )
 
 
+@dataclass
+class LLMClient:
+    base_url: str
+    api_key: str
+    model: str
+    client: OpenAI
+
+    def is_blocked_response(self, content: Optional[str]) -> bool:
+        if not content:
+            return True
+        content_lower = content.lower()
+        return any(pattern.lower() in content_lower for pattern in BLOCKED_RESPONSE_PATTERNS)
+
 class LLM:
     def __init__(
         self,
-        base_url: str,
-        api_key: str,
-        model: str,
+        llm_configs: list,
         tokens_api_key: str = "",
         tokens_username: str = "",
         tokens_password: str = "",
     ) -> None:
-        self._base_url = base_url
-        self._client = OpenAI(base_url=base_url, api_key=api_key)
-        self._model = model
+        self._clients: List[LLMClient] = []
+        for config in llm_configs:
+            self._clients.append(LLMClient(
+                base_url=config.base_url,
+                api_key=config.api_key,
+                model=config.model,
+                client=OpenAI(base_url=config.base_url, api_key=config.api_key),
+            ))
+
+        self._base_url = llm_configs[0].base_url if llm_configs else ""
         self._tokens_api_key = tokens_api_key
         self._tokens_username = tokens_username
         self._tokens_password = tokens_password
@@ -87,20 +114,34 @@ class LLM:
         )
         print(history_text)
         print(prompt)
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-            )
-            return response.choices[0].message.content
-        except Exception as exc:
-            print(f"Ошибка: {exc}")
-            return None
+
+        for i, llm_client in enumerate(self._clients):
+            try:
+                print(f"  Trying API #{i+1} ({llm_client.model})...")
+                response = llm_client.client.chat.completions.create(
+                    model=llm_client.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt,
+                        }
+                    ],
+                )
+                content = response.choices[0].message.content
+
+                if llm_client.is_blocked_response(content):
+                    print(f"  ⚠️  API #{i+1}: blocked: {content[:80]}...")
+                    continue
+                
+                print(f"  ✅ API #{i+1}: success")
+                return content
+
+            except Exception as exc:
+                print(f"  ❌ API #{i+1}: error - {exc}")
+                continue
+        
+        print("  ❌ All APIs failed")
+        return None
 
     def _get_prompt_template(self, insult_level: int) -> Optional[str]:
         today = date.today()

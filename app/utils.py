@@ -1,7 +1,9 @@
 import random
 import re
+import threading
+import time
+
 from datetime import date
-from time import sleep
 from typing import Union
 
 from telebot import TeleBot
@@ -42,7 +44,7 @@ def select_user(db: Database, chat_id: int) -> Union[UserRecord, str]:
 
 def reply_with_typing(bot: TeleBot, message, text: str) -> None:
     bot.send_chat_action(message.chat.id, "typing")
-    sleep(random.randint(2, 7))
+    time.sleep(random.randint(2, 7))
     bot.reply_to(message, text)
 
 
@@ -136,3 +138,21 @@ def format_question_response(
         percent=percent_value,
     )
     return re.sub(r"[ ]{2,}", " ", response)
+
+def reply_with_min_delay(bot, message, llm_func, min_seconds=2):
+    target_delay = random.randint(min_seconds, min_seconds + 5)
+    result = [None]
+
+    def _run():
+        result[0] = llm_func()
+
+    thread = threading.Thread(target=_run)
+    start = time.time()
+    thread.start()
+
+    while thread.is_alive() or (time.time() - start) < target_delay:
+        bot.send_chat_action(message.chat.id, "typing")
+        time.sleep(1)
+
+    thread.join()
+    return result[0]
