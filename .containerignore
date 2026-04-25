@@ -1,0 +1,9 @@
+.env
+ansible
+.git
+.gitignore
+__pycache__
+README.md
+compose.yaml
+Containerfile
+init.db

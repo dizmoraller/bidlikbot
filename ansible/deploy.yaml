@@ -1,0 +1,94 @@
+---
+- name: Deploy Bidlik Telegram Bot
+  hosts: bots
+  become: false
+  vars:
+    local_project_path: "{{ playbook_dir }}/.."
+    archive_name: bidlikbot-deploy.tar.gz
+    local_archive_path: "/tmp/{{ archive_name }}"
+    remote_archive_path: "/tmp/{{ archive_name }}"
+
+  tasks:
+    - name: Check if Docker is installed
+      ansible.builtin.command: docker --version
+      register: docker_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check if Podman is installed
+      ansible.builtin.command: podman --version
+      register: podman_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Fail if no container engine is found
+      ansible.builtin.fail:
+        msg: "No container engine found"
+      when: docker_check.rc != 0 and podman_check.rc != 0
+
+    - name: Set container engine command
+      ansible.builtin.set_fact:
+        compose_cmd: "{{ 'docker compose' if docker_check.rc == 0 else 'podman compose' }}"
+
+    - name: Show which engine will be used
+      ansible.builtin.debug:
+        msg: "Will use {{ compose_cmd }}"
+
+    - name: Ensure project directory exists on server
+      ansible.builtin.file:
+        path: "{{ project_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create project archive locally (respecting .gitignore)
+      ansible.builtin.command: # noqa command-instead-of-module
+        cmd: "git archive --format=tar.gz --output={{ local_archive_path }} HEAD"
+        chdir: "{{ local_project_path }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Copy archive to server
+      ansible.builtin.copy:
+        src: "{{ local_archive_path }}"
+        dest: "{{ remote_archive_path }}"
+        mode: '0644'
+
+    - name: Clean up app directory before deployment
+      ansible.builtin.file:
+        path: "{{ project_dir }}/app"
+        state: absent
+
+    - name: Extract archive on server
+      ansible.builtin.unarchive:
+        src: "{{ remote_archive_path }}"
+        dest: "{{ project_dir }}"
+        remote_src: true
+        extra_opts: [--strip-components=0]
+        mode: '0755'
+
+    - name: Clean up local archive
+      ansible.builtin.file:
+        path: "{{ local_archive_path }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+
+    - name: Clean up remote archive
+      ansible.builtin.file:
+        path: "{{ remote_archive_path }}"
+        state: absent
+
+    - name: Build container image
+      ansible.builtin.command:
+        cmd: "{{ compose_cmd }} build --pull"
+        chdir: "{{ project_dir }}"
+      register: build_result
+      changed_when: "'Successfully built' in build_result.stdout or 'STEP' in build_result.stdout"
+
+    - name: Restart services
+      ansible.builtin.command:
+        cmd: "{{ compose_cmd }} up -d --force-recreate"
+        chdir: "{{ project_dir }}"
+      register: up_result
+      changed_when: "'Creating' in up_result.stdout or 'Recreating' in up_result.stdout or 'Starting' in up_result.stdout"
