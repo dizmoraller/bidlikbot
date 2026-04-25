@@ -12,10 +12,7 @@ def main():
     bot = TeleBot(settings.token)
     db = Database.init(settings.database_url)
     llm = LLM(
-        settings.llm_base_url,
-        settings.llm_api_key,
-        settings.llm_model,
-        tokens_api_key=settings.llm_tokens_api_key,
+        llm_configs=settings.llm_configs,
         tokens_username=settings.llm_tokens_username,
         tokens_password=settings.llm_tokens_password,
     )

@@ -1,7 +1,7 @@
 import random
 import re
+
 from datetime import datetime, timedelta, timezone
-from time import sleep
 from collections import defaultdict, deque
 from typing import DefaultDict, Deque, Dict, Optional, Tuple
 
@@ -23,6 +23,7 @@ from app.utils import (
     reply_with_typing,
     when,
     find_question_match,
+    reply_with_min_delay,
 )
 
 
@@ -106,7 +107,73 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
             boost = db.get_insult_boost_multiplier(scope_for_settings)
             insult_probability = min(1.0, insult_probability * boost)
 
-        if insult_probability > 0 and random.random() < insult_probability:
+        already_replied = handle_question_templates(
+            bot,
+            message,
+            text,
+            chat_id,
+            db,
+            user_id=user_id,
+            templates=question_templates,
+            match=question_match,
+            phrase_chance=question_phrase_chance,
+            reply_func=send_reply,
+        )
+
+        if not already_replied and "быдлик не тегай меня" in text:
+            tag_status = db.get_tag_status(user_id, chat_id)
+            if tag_status:
+                db.set_tag_status(user_id, chat_id, False)
+                send_reply(
+                    bot,
+                    message,
+                    'Готово\nЕсли захочешь, чтобы я снова тебя тегал, просто напиши мне "Быдлик тегай меня"',
+                )
+            else:
+                send_reply(bot, message, "Ты уже просил, я тебя не тегаю")
+            already_replied = True
+
+        elif not already_replied and "быдлик тегай меня" in text:
+            tag_status = db.get_tag_status(user_id, chat_id)
+            if not tag_status:
+                db.set_tag_status(user_id, chat_id, True)
+                send_reply(
+                    bot,
+                    message,
+                    'Готово\nЕсли захочешь, чтобы я перестал тебя тегать, просто напиши мне "Быдлик не тегай меня"',
+                )
+            else:
+                send_reply(bot, message, "Я тебя и так тегаю")
+            already_replied = True
+
+        elif not already_replied and "быдлик насколько" in text:
+            que_s = text.split("насколько", 1)
+            que = que_s[1]
+            seed = generate_seed(que, user_id)
+            random.seed(int(seed))
+            result = str(random.randrange(1, 100) + 1)
+            send_reply(bot, message, "На" + " " + result + "%")
+            already_replied = True
+
+        elif not already_replied and "быдлик когда" in text:
+            if random.random() < when_phrase_chance:
+                result = random.choice(FLEXIBLE_TIME_RESPONSES)
+            else:
+                date_choice = random.choice(TIME_UNIT_OPTIONS)
+                numbers = random.randrange(1, 100)
+                result = when(date_choice, numbers)
+            send_reply(bot, message, result)
+            already_replied = True
+
+        elif not already_replied and "быдлик " in text and " или " in text:
+            que_s = text.split("быдлик", 1)[1].split(" или ")
+            if not que_s[0].strip():
+                que_s = que_s[1:]
+            result = random.choice(que_s)
+            send_reply(bot, message, result)
+            already_replied = True
+
+        if not already_replied and insult_probability > 0 and random.random() < insult_probability:
             if message.content_type == "photo":
                 prompt = "фото"
             elif message.content_type == "video":
@@ -121,75 +188,21 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
                     history_lines.append(f"[БОТ]: {content}")
                 else:
                     history_lines.append(f"{name}: {content}")
-            answer = llm.generate_insult(display_name, prompt, insult_level, history_lines)
+
+            answer = reply_with_min_delay(
+                bot,
+                message,
+                llm_func=lambda: llm.generate_insult(
+                    display_name, prompt, insult_level, history_lines
+                ),
+                min_seconds=2,
+            )
             if answer is None:
                 answer = random.choice(INSULT_FALLBACKS)
+
             commit_user_history()
-            bot.send_chat_action(message.chat.id, "typing")
-            sleep(random.randint(2, 7))
             bot.reply_to(message, answer)
             log_bot_history(answer)
-
-        handle_question_templates(
-            bot,
-            message,
-            text,
-            chat_id,
-            db,
-            user_id=user_id,
-            templates=question_templates,
-            match=question_match,
-            phrase_chance=question_phrase_chance,
-            reply_func=send_reply,
-        )
-
-        if "быдлик не тегай меня" in text:
-            tag_status = db.get_tag_status(user_id, chat_id)
-            if tag_status:
-                db.set_tag_status(user_id, chat_id, False)
-                send_reply(
-                    bot,
-                    message,
-                    'Готово\nЕсли захочешь, чтобы я снова тебя тегал, просто напиши мне "Быдлик тегай меня"',
-                )
-            else:
-                send_reply(bot, message, "Ты уже просил, я тебя не тегаю")
-
-        if "быдлик тегай меня" in text:
-            tag_status = db.get_tag_status(user_id, chat_id)
-            if not tag_status:
-                db.set_tag_status(user_id, chat_id, True)
-                send_reply(
-                    bot,
-                    message,
-                    'Готово\nЕсли захочешь, чтобы я перестал тебя тегать, просто напиши мне "Быдлик не тегай меня"',
-                )
-            else:
-                send_reply(bot, message, "Я тебя и так тегаю")
-
-        if "быдлик насколько" in text:
-            que_s = text.split("насколько", 1)
-            que = que_s[1]
-            seed = generate_seed(que, user_id)
-            random.seed(int(seed))
-            result = str(random.randrange(1, 100) + 1)
-            send_reply(bot, message, "На" + " " + result + "%")
-
-        if "быдлик когда" in text:
-            if random.random() < when_phrase_chance:
-                result = random.choice(FLEXIBLE_TIME_RESPONSES)
-            else:
-                date_choice = random.choice(TIME_UNIT_OPTIONS)
-                numbers = random.randrange(1, 100)
-                result = when(date_choice, numbers)
-            send_reply(bot, message, result)
-
-        if "быдлик " in text and " или " in text:
-            que_s = text.split("быдлик", 1)[1].split(" или ")
-            if not que_s[0].strip():
-                que_s = que_s[1:]
-            result = random.choice(que_s)
-            send_reply(bot, message, result)
 
         commit_user_history()
 
