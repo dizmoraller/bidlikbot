@@ -1,7 +1,9 @@
 services:
   bot:
     container_name: bidlik
-    build: .
+    build:
+      context: .
+      dockerfile: Containerfile
     restart: unless-stopped
     env_file:
       - .env
