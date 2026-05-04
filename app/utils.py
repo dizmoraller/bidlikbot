@@ -7,9 +7,15 @@ from datetime import date
 from typing import Union
 
 from telebot import TeleBot
+from telebot.apihelper import ApiTelegramException
 
 from app.db import Database, QuestionTemplate, UserRecord
 from app.texts import QUANTITY_RESPONSES
+
+# Minimum interval (seconds) between send_chat_action calls per chat
+_CHAT_ACTION_THROTTLE_SECONDS = 5
+# Per-chat timestamp of last successful send_chat_action
+_last_chat_action: dict[int, float] = {}
 
 
 def when(date_choice, numbers):
@@ -42,8 +48,22 @@ def select_user(db: Database, chat_id: int) -> Union[UserRecord, str]:
     return random.choice(weighted_members)
 
 
+def _send_chat_action_safe(bot: TeleBot, chat_id: int) -> None:
+    """Send typing action with throttle and error handling."""
+    now = time.monotonic()
+    last = _last_chat_action.get(chat_id, 0)
+    if now - last < _CHAT_ACTION_THROTTLE_SECONDS:
+        return
+    try:
+        bot.send_chat_action(chat_id, "typing")
+        _last_chat_action[chat_id] = now
+    except ApiTelegramException:
+        # 429 Too Many Requests or other API errors — silently ignore
+        pass
+
+
 def reply_with_typing(bot: TeleBot, message, text: str) -> None:
-    bot.send_chat_action(message.chat.id, "typing")
+    _send_chat_action_safe(bot, message.chat.id)
     time.sleep(random.randint(2, 7))
     bot.reply_to(message, text)
 
@@ -151,7 +171,7 @@ def reply_with_min_delay(bot, message, llm_func, min_seconds=2):
     thread.start()
 
     while thread.is_alive() or (time.time() - start) < target_delay:
-        bot.send_chat_action(message.chat.id, "typing")
+        _send_chat_action_safe(bot, message.chat.id)
         time.sleep(1)
 
     thread.join()

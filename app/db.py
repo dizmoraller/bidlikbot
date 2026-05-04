@@ -61,6 +61,12 @@ class Database:
         self._ensure_chat_bans_table()
         self._ensure_default_question_templates()
 
+    def _execute(self, query: str, params=None):
+        """Execute a query using a fresh cursor and return it."""
+        cur = self._connection.cursor()
+        cur.execute(query, params)
+        return cur
+
     @classmethod
     def init(cls, database_url: str) -> "Database":
         connection = psycopg2.connect(database_url)
@@ -435,11 +441,16 @@ class Database:
         self._connection.commit()
 
     def is_chat_admin(self, user_id: int, chat_id: int) -> bool:
-        self._cursor.execute(
-            "SELECT 1 FROM users.chat_admins WHERE user_id = %s AND chat_id = %s",
-            (user_id, chat_id),
-        )
-        return self._cursor.fetchone() is not None
+        try:
+            cur = self._execute(
+                "SELECT 1 FROM users.chat_admins WHERE user_id = %s AND chat_id = %s",
+                (user_id, chat_id),
+            )
+            row = cur.fetchone()
+            cur.close()
+            return row is not None
+        except psycopg2.ProgrammingError:
+            return False
 
     def get_chat_admin_ids(self, chat_id: int) -> Set[int]:
         self._cursor.execute(
@@ -683,12 +694,16 @@ class Database:
         self._connection.commit()
 
     def _get_chat_setting(self, chat_id: int, key: str) -> Optional[str]:
-        self._cursor.execute(
-            "SELECT value FROM users.chat_settings WHERE chat_id = %s AND key = %s",
-            (chat_id, key),
-        )
-        row = self._cursor.fetchone()
-        return row[0] if row else None
+        try:
+            cur = self._execute(
+                "SELECT value FROM users.chat_settings WHERE chat_id = %s AND key = %s",
+                (chat_id, key),
+            )
+            row = cur.fetchone()
+            cur.close()
+            return row[0] if row else None
+        except psycopg2.ProgrammingError:
+            return None
 
     def _set_chat_setting(self, chat_id: int, key: str, value: str) -> None:
         self._cursor.execute(
