@@ -55,7 +55,17 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
 
         _ensure_chat_owner_admin(bot, chat_id, user_id, admin_service)
 
-        history_content = raw_text.strip() or _describe_non_text_message(message)
+        # Download photo early so we can describe it for history and reuse for insult
+        image_base64, image_mime = None, "image/jpeg"
+        if message.content_type == "photo":
+            image_base64, image_mime = _download_photo_base64(bot, message)
+            if image_base64:
+                description = llm.describe_image(image_base64, image_mime)
+                history_content = f"[изображение: {description}]" if description else "[изображение]"
+            else:
+                history_content = "[изображение]"
+        else:
+            history_content = raw_text.strip() or _describe_non_text_message(message)
         history_queue = chat_history.get(chat_id)
         if history_queue is None:
             history_queue = chat_history.setdefault(chat_id, deque(maxlen=HISTORY_LIMIT))
@@ -176,11 +186,7 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
             already_replied = True
 
         if not already_replied and insult_probability > 0 and random.random() < insult_probability:
-            image_base64 = None
-            image_mime = "image/jpeg"
-
             if message.content_type == "photo":
-                image_base64, image_mime = _download_photo_base64(bot, message)
                 prompt = message.caption or "[изображение]"
             elif message.content_type == "video":
                 prompt = "видео"
