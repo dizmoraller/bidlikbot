@@ -165,6 +165,49 @@ class LLM:
         print("  ❌ All APIs failed")
         return None
 
+    def describe_image(
+        self, image_base64: str, image_mime: str = "image/jpeg"
+    ) -> Optional[str]:
+        """Send a quick request to describe an image briefly for chat history."""
+        for i, llm_client in enumerate(self._clients):
+            if not llm_client.supports_images:
+                continue
+            try:
+                print(f"  describe_image: trying API #{i+1} ({llm_client.model})...")
+                response = llm_client.client.chat.completions.create(
+                    model=llm_client.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        "Опиши кратко в одном предложении что изображено на картинке. "
+                                        "Пиши по-русски, без лишних слов, только суть. "
+                                        "Пример: мем с котом на стуле"
+                                    ),
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{image_mime};base64,{image_base64}",
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                )
+                content = response.choices[0].message.content
+                if content:
+                    desc = content.strip().rstrip(".")
+                    print(f"  describe_image: ✅ {desc}")
+                    return desc
+            except Exception as exc:
+                print(f"  describe_image: ❌ API #{i+1} error - {exc}")
+                continue
+        return None
+
     def _get_prompt_template(self, insult_level: int) -> Optional[str]:
         today = date.today()
         if today.month == 4 and today.day == 1:
