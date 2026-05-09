@@ -48,6 +48,7 @@ def main():
     db = Database.init(settings.database_url)
     llm = LLM(
         llm_configs=settings.llm_configs,
+        image_config=settings.llm_image_config,
         tokens_username=settings.llm_tokens_username,
         tokens_password=settings.llm_tokens_password,
     )
