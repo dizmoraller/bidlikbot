@@ -1,3 +1,4 @@
+import base64
 import random
 import re
 
@@ -175,8 +176,12 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
             already_replied = True
 
         if not already_replied and insult_probability > 0 and random.random() < insult_probability:
+            image_base64 = None
+            image_mime = "image/jpeg"
+
             if message.content_type == "photo":
-                prompt = "фото"
+                image_base64, image_mime = _download_photo_base64(bot, message)
+                prompt = message.caption or "[изображение]"
             elif message.content_type == "video":
                 prompt = "видео"
             else:
@@ -194,7 +199,8 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
                 bot,
                 message,
                 llm_func=lambda: llm.generate_insult(
-                    display_name, prompt, insult_level, history_lines
+                    display_name, prompt, insult_level, history_lines,
+                    image_base64=image_base64, image_mime=image_mime,
                 ),
                 min_seconds=2,
             )
@@ -793,6 +799,29 @@ def _build_settings_summary(db: Database, chat_id: Optional[int]) -> str:
         lines.extend(chat_lines)
 
     return "\n".join(lines)
+
+
+def _download_photo_base64(bot: TeleBot, message) -> Tuple[Optional[str], str]:
+    """Download the largest photo from a Telegram message and return (base64, mime_type)."""
+    try:
+        photos = message.photo
+        if not photos:
+            return None, "image/jpeg"
+        # Pick the highest-resolution photo (last in the array)
+        best_photo = photos[-1]
+        file_info = bot.get_file(best_photo.file_id)
+        file_bytes = bot.download_file(file_info.file_path)
+        b64 = base64.b64encode(file_bytes).decode("utf-8")
+        # Determine mime from file extension
+        mime = "image/jpeg"
+        if file_info.file_path and file_info.file_path.lower().endswith(".png"):
+            mime = "image/png"
+        elif file_info.file_path and file_info.file_path.lower().endswith(".webp"):
+            mime = "image/webp"
+        return b64, mime
+    except Exception as exc:
+        print(f"Failed to download photo: {exc}")
+        return None, "image/jpeg"
 
 
 def _build_admin_help_message() -> str:

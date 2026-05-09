@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass, field
 from typing import List
 
@@ -9,6 +10,7 @@ class LLMConfig:
     base_url: str
     api_key: str
     model: str
+    supports_images: bool = False
 
 @dataclass
 class Settings:
@@ -22,34 +24,38 @@ class Settings:
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 
 def _load_llm_configs() -> List[LLMConfig]:
+    index_pattern = re.compile(r"^LLM_BASE_URL_(\d+)$")
+    found_indices = []
+    for key in os.environ:
+        m = index_pattern.match(key)
+        if m:
+            found_indices.append(int(m.group(1)))
+
     configs = []
-    
-    index = 1
-    while True:
-        base_url = os.environ.get(f"LLM_BASE_URL_{index}")
-        api_key = os.environ.get(f"LLM_API_KEY_{index}")
-        model = os.environ.get(f"LLM_MODEL_{index}")
-        
-        if not base_url:
-            break
-            
+    for idx in sorted(found_indices):
+        base_url = os.environ[f"LLM_BASE_URL_{idx}"]
+        api_key = os.environ.get(f"LLM_API_KEY_{idx}")
+        model = os.environ.get(f"LLM_MODEL_{idx}")
+        supports_images = os.environ.get(f"LLM_SUPPORTS_IMAGES_{idx}", "false").lower() in ("true", "1", "yes")
         configs.append(LLMConfig(
             base_url=base_url,
             api_key=api_key or "unused",
-            model=model or "grok-3-fast"
+            model=model or "grok-3-fast",
+            supports_images=supports_images,
         ))
-        index += 1
-    
+
     if not configs:
         base_url = os.environ.get("LLM_BASE_URL", "http://localhost:8000/v1")
         api_key = os.environ.get("LLM_API_KEY", "unused")
         model = os.environ.get("LLM_MODEL", "grok-3-fast")
+        supports_images = os.environ.get("LLM_SUPPORTS_IMAGES", "false").lower() in ("true", "1", "yes")
         configs.append(LLMConfig(
             base_url=base_url,
             api_key=api_key,
-            model=model
+            model=model,
+            supports_images=supports_images,
         ))
-    
+
     return configs
 
 def load_settings() -> Settings:
