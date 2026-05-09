@@ -20,6 +20,7 @@ from app.texts import (
 from app.utils import (
     generate_seed,
     handle_question_templates,
+    normalize_text,
     reply_with_typing,
     when,
     find_question_match,
@@ -45,7 +46,7 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
         display_name = _format_display_name(message.from_user)
         chat_id = message.chat.id
         raw_text = (message.text or message.caption or "") or ""
-        text = raw_text.lower()
+        text = normalize_text(raw_text.lower())
         db.ensure_user(user_id, username, chat_id)
 
         if admin_service.is_banned(user_id, chat_id):
