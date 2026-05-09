@@ -1,7 +1,7 @@
 import os
 import re
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 from dotenv import load_dotenv
 
@@ -17,6 +17,7 @@ class Settings:
     token: str
     database_url: str
     llm_configs: List[LLMConfig] = field(default_factory=list)
+    llm_image_config: Optional[LLMConfig] = None
     llm_tokens_username: str = ""
     llm_tokens_password: str = ""
 
@@ -58,11 +59,20 @@ def _load_llm_configs() -> List[LLMConfig]:
 
     return configs
 
+def _load_image_llm_config() -> Optional[LLMConfig]:
+    base_url = os.environ.get("LLM_IMAGE_BASE_URL")
+    if not base_url:
+        return None
+    api_key = os.environ.get("LLM_IMAGE_API_KEY", "unused")
+    model = os.environ.get("LLM_IMAGE_MODEL", "grok-3-fast")
+    return LLMConfig(base_url=base_url, api_key=api_key, model=model, supports_images=True)
+
 def load_settings() -> Settings:
     return Settings(
         token=os.environ["TOKEN"],
         database_url=os.environ["DATABASE_URL"],
         llm_configs=_load_llm_configs(),
+        llm_image_config=_load_image_llm_config(),
         llm_tokens_username=os.environ.get("LLM_TOKENS_USERNAME", ""),
         llm_tokens_password=os.environ.get("LLM_TOKENS_PASSWORD", ""),
     )

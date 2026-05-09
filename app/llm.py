@@ -82,6 +82,7 @@ class LLM:
     def __init__(
         self,
         llm_configs: list,
+        image_config=None,
         tokens_api_key: str = "",
         tokens_username: str = "",
         tokens_password: str = "",
@@ -95,6 +96,17 @@ class LLM:
                 supports_images=config.supports_images,
                 client=OpenAI(base_url=config.base_url, api_key=config.api_key),
             ))
+
+        # Dedicated image client for describe_image (fast model)
+        self._image_client: Optional[LLMClient] = None
+        if image_config:
+            self._image_client = LLMClient(
+                base_url=image_config.base_url,
+                api_key=image_config.api_key,
+                model=image_config.model,
+                supports_images=True,
+                client=OpenAI(base_url=image_config.base_url, api_key=image_config.api_key),
+            )
 
         self._base_url = llm_configs[0].base_url if llm_configs else ""
         self._tokens_api_key = tokens_api_key
@@ -168,12 +180,19 @@ class LLM:
     def describe_image(
         self, image_base64: str, image_mime: str = "image/jpeg"
     ) -> Optional[str]:
-        """Send a quick request to describe an image briefly for chat history."""
-        for i, llm_client in enumerate(self._clients):
-            if not llm_client.supports_images:
-                continue
+        # Use dedicated image client if configured, otherwise fall back to first supports_images client
+        clients_to_try: List[LLMClient] = []
+        if self._image_client:
+            clients_to_try.append(self._image_client)
+        else:
+            for c in self._clients:
+                if c.supports_images:
+                    clients_to_try.append(c)
+                    break
+
+        for i, llm_client in enumerate(clients_to_try):
             try:
-                print(f"  describe_image: trying API #{i+1} ({llm_client.model})...")
+                print(f"  describe_image: trying {llm_client.model}...")
                 response = llm_client.client.chat.completions.create(
                     model=llm_client.model,
                     messages=[
@@ -204,7 +223,7 @@ class LLM:
                     print(f"  describe_image: ✅ {desc}")
                     return desc
             except Exception as exc:
-                print(f"  describe_image: ❌ API #{i+1} error - {exc}")
+                print(f"  describe_image: ❌ {llm_client.model} error - {exc}")
                 continue
         return None
 
