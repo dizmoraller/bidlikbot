@@ -38,14 +38,14 @@ INSULT_PROMPTS = {
         "Твоя главная задача — оскорбить пользователя, основывая своё оскорбление на контексте последних сообщений. "
         "Изучи историю чата и придумай едкий, матерный, комментарий. "
         "Каждый раз придумывай уникальное оскорбление, не повторяй свои предыдущие ответы из истории. "
-        "Если история не даёт хорошего повода для оскорбления, можешь ответить прямо на сообщение пользователя. "
+        "Если история не даёт хорошего повода для оскорбления, можешь ответить прямо на сообщение пользователя или на его вопрос. "
+        "Если пользователь даёт понять что ему обидно, можешь немного извиниться и временно сбавить тон (но не подлизывайся). "
         "Не используй знаки препинания. "
         "В истории [БОТ] — это твои собственные сообщения. "
         "Если пользователь оскорбил Быдлика, оскорби его в ответ, а не Быдлика. "
         "История чата:\n{history}\n"
-        "Пользователь {user_name} написал тебе: {user_message}\n"
+        "Пользователь {user_name} написал: {user_message}\n"
         "Важно: пиши только само оскорбление, без лишнего текста, одно-два коротких предложения в одном абзаце. "
-        "Помни: ты оскорбляешь пользователя, а не Быдлика."
     ),
 }
 
@@ -69,6 +69,7 @@ class LLMClient:
     base_url: str
     api_key: str
     model: str
+    supports_images: bool
     client: OpenAI
 
     def is_blocked_response(self, content: Optional[str]) -> bool:
@@ -91,6 +92,7 @@ class LLM:
                 base_url=config.base_url,
                 api_key=config.api_key,
                 model=config.model,
+                supports_images=config.supports_images,
                 client=OpenAI(base_url=config.base_url, api_key=config.api_key),
             ))
 
@@ -100,7 +102,13 @@ class LLM:
         self._tokens_password = tokens_password
 
     def generate_insult(
-        self, user_name: str, user_message: str, insult_level: int, history: List[str]
+        self,
+        user_name: str,
+        user_message: str,
+        insult_level: int,
+        history: List[str],
+        image_base64: Optional[str] = None,
+        image_mime: str = "image/jpeg",
     ) -> Optional[str]:
         prompt_template = self._get_prompt_template(insult_level)
         if not prompt_template:
@@ -118,12 +126,26 @@ class LLM:
         for i, llm_client in enumerate(self._clients):
             try:
                 print(f"  Trying API #{i+1} ({llm_client.model})...")
+
+                if image_base64 and llm_client.supports_images:
+                    user_content = [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{image_mime};base64,{image_base64}",
+                            },
+                        },
+                    ]
+                else:
+                    user_content = prompt
+
                 response = llm_client.client.chat.completions.create(
                     model=llm_client.model,
                     messages=[
                         {
                             "role": "user",
-                            "content": prompt,
+                            "content": user_content,
                         }
                     ],
                 )

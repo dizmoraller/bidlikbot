@@ -4,7 +4,14 @@ import threading
 import time
 
 from datetime import date
-from typing import Union
+from typing import Dict, Union
+
+# Unicode confusable characters → Cyrillic equivalents
+# Users on non-Cyrillic keyboards may type visually identical Latin characters
+_CONFUSABLE_MAP: Dict[str, str] = {
+    "\u00eb": "ё",  # ë (Latin e with diaeresis) → ё (Cyrillic io)
+    "\u00cb": "Ё",  # Ë (Latin E with diaeresis) → Ё (Cyrillic IO)
+}
 
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
@@ -60,6 +67,13 @@ def _send_chat_action_safe(bot: TeleBot, chat_id: int) -> None:
     except ApiTelegramException:
         # 429 Too Many Requests or other API errors — silently ignore
         pass
+
+
+def normalize_text(text: str) -> str:
+    """Replace Unicode confusable characters with their Cyrillic equivalents."""
+    for src, dst in _CONFUSABLE_MAP.items():
+        text = text.replace(src, dst)
+    return text
 
 
 def reply_with_typing(bot: TeleBot, message, text: str) -> None:
