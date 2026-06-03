@@ -103,6 +103,19 @@
         path: "{{ remote_archive_path }}"
         state: absent
 
+    - name: Ensure .env file exists on server
+      ansible.builtin.stat:
+        path: "{{ project_dir }}/.env"
+      register: env_file
+
+    - name: Fail if .env file is missing
+      ansible.builtin.fail:
+        msg: >
+          File {{ project_dir }}/.env does not exist on the server.
+          Create it from .env-example and fill in the secrets:
+          cp {{ project_dir }}/.env-example {{ project_dir }}/.env
+      when: not env_file.stat.exists
+
     - name: Build container image
       ansible.builtin.command:
         cmd: "{{ compose_cmd }} build --pull"
