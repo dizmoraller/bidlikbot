@@ -52,6 +52,8 @@ class Database:
     def __init__(self, connection) -> None:
         self._connection = connection
         self._cursor = connection.cursor()
+        self._ensure_schema()
+        self._ensure_user_table()
         self._ensure_user_admin_column()
         self._ensure_user_unique_constraint()
         self._ensure_question_templates_table()
@@ -627,6 +629,23 @@ class Database:
         )
         self._connection.commit()
 
+
+    def _ensure_schema(self) -> None:
+        self._cursor.execute("CREATE SCHEMA IF NOT EXISTS users")
+        self._connection.commit()
+
+    def _ensure_user_table(self) -> None:
+        self._cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users.user (
+                id      NUMERIC,
+                username TEXT,
+                chat_id  NUMERIC,
+                tag      BOOLEAN DEFAULT true
+            )
+            """
+        )
+        self._connection.commit()
 
     def _ensure_user_admin_column(self) -> None:
         self._cursor.execute(
