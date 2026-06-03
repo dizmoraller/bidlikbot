@@ -26,6 +26,30 @@
         msg: "No container engine found"
       when: docker_check.rc != 0 and podman_check.rc != 0
 
+    - name: Check if docker compose works
+      ansible.builtin.command: docker compose version
+      register: docker_compose_check
+      ignore_errors: true
+      changed_when: false
+      when: docker_check.rc == 0
+
+    - name: Check if podman compose works
+      ansible.builtin.command: podman compose version
+      register: podman_compose_check
+      ignore_errors: true
+      changed_when: false
+      when: podman_check.rc == 0
+
+    - name: Fail if Docker is installed but docker compose is not available
+      ansible.builtin.fail:
+        msg: "Docker is installed but 'docker compose' is not available"
+      when: docker_check.rc == 0 and (docker_compose_check.rc is defined and docker_compose_check.rc != 0)
+
+    - name: Fail if Podman is installed but podman compose is not available
+      ansible.builtin.fail:
+        msg: "Podman is installed but 'podman compose' is not available"
+      when: podman_check.rc == 0 and podman_compose_check.rc is defined and podman_compose_check.rc != 0
+
     - name: Set container engine command
       ansible.builtin.set_fact:
         compose_cmd: "{{ 'docker compose' if docker_check.rc == 0 else 'podman compose' }}"
