@@ -494,6 +494,8 @@ def _handle_admin_commands(
         reply_func(bot, message, "\n".join(lines))
         return True
     if text.startswith("быдлик тегай") or text.startswith("быдлик не тегай"):
+        if text.endswith("тегай меня"):
+            return False
         if is_private_chat:
             reply_func(bot, message, "Настройки тегов доступны только в чате")
             return True
