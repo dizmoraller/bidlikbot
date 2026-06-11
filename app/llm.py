@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 from typing import List, Optional
 from urllib import request
 from openai import OpenAI
@@ -20,6 +20,7 @@ INSULT_PROMPTS = {
         "Твоя задача — отвечать короткими, озорными и мягкими подколами. Не используй мат или прямые оскорбления. "
         "Постарайся остроумно прокомментировать одно из последних сообщений в чате или само сообщение пользователя. "
         "Вот история:\n{history}\n"
+        "Текущая дата: {current_date} (МСК)\n"
         "Сообщение пользователя {user_name}: {user_message}\n"
         "Ответь только подколкой."
     ),
@@ -30,6 +31,7 @@ INSULT_PROMPTS = {
         "Если контекст не подходит для язвительного комментария, придумай что-то своё, но в том же стиле. "
         "Не используй знаки препинания или делай это по минимуму. "
         "Недавние сообщения чата:\n{history}\n"
+        "Текущая дата: {current_date} (МСК)\n"
         "Сообщение пользователя {user_name}: {user_message}\n"
         "Дай только сам ответ."
     ),
@@ -44,6 +46,7 @@ INSULT_PROMPTS = {
         "В истории [БОТ] — это твои собственные сообщения. "
         "Если пользователь оскорбил Быдлика, оскорби его в ответ, а не Быдлика. "
         "История чата:\n{history}\n"
+        "Текущая дата: {current_date} (МСК)\n"
         "Пользователь {user_name} написал: {user_message}\n"
         "Важно: обязательно ответь на вопрос пользователя и добавь оскорбление. Пиши одно-два коротких предложения в одном абзаце, без лишнего текста. "
     ),
@@ -60,6 +63,7 @@ APRIL_FOOLS_PROMPT = (
     "Не добавляй пояснений или вступлений. "
     "История чата:\n{history}\n"
     "Сообщение пользователя {user_name}: {user_message}\n"
+    "Текущая дата: {current_date} (МСК)\n"
     "Важно: напиши только сам ответ. Много не пиши, одного короткого предложения достаточно, можешь использовать милые emoji, и старайся не повторяться (ты увидишь в истории что ты уже писал)"
 )
 
@@ -127,10 +131,13 @@ class LLM:
             return None
 
         history_text = "\n".join(history[-20:]) if history else "нет данных"
+        msk_now = datetime.now(timezone(timedelta(hours=3)))
+        current_date = msk_now.strftime("%d.%m.%Y %H:%M")
         prompt = prompt_template.format(
             user_name=user_name or "неизвестный",
             user_message=user_message,
             history=history_text,
+            current_date=current_date,
         )
         print(history_text)
         print(prompt)
