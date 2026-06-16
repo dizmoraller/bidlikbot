@@ -6,3 +6,5 @@ __pycache__
 README.md
 compose.yaml
 Containerfile
+*.db
+data/
