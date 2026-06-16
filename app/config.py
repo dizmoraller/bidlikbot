@@ -15,7 +15,7 @@ class LLMConfig:
 @dataclass
 class Settings:
     token: str
-    database_url: str
+    database_path: str
     llm_configs: List[LLMConfig] = field(default_factory=list)
     llm_image_config: Optional[LLMConfig] = None
     llm_tokens_username: str = ""
@@ -70,7 +70,7 @@ def _load_image_llm_config() -> Optional[LLMConfig]:
 def load_settings() -> Settings:
     return Settings(
         token=os.environ["TOKEN"],
-        database_url=os.environ["DATABASE_URL"],
+        database_path=os.environ.get("DATABASE_PATH", "bidlik.db"),
         llm_configs=_load_llm_configs(),
         llm_image_config=_load_image_llm_config(),
         llm_tokens_username=os.environ.get("LLM_TOKENS_USERNAME", ""),
