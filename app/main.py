@@ -1,7 +1,6 @@
-import time
 import logging
+import os
 
-import requests.exceptions
 from telebot import TeleBot
 
 from app.admin import AdminService
@@ -12,40 +11,13 @@ from app.llm import LLM
 
 logger = logging.getLogger(__name__)
 
-# Max seconds to wait between polling retries
-_MAX_BACKOFF_SECONDS = 300  # 5 minutes
-
-
-def _polling_with_backoff(bot: TeleBot) -> None:
-    """Run polling with automatic retry and exponential backoff on network errors."""
-    backoff = 5  # initial backoff in seconds
-    while True:
-        try:
-            logger.info("Starting polling…")
-            bot.polling(
-                none_stop=True,
-                timeout=30,
-                long_polling_timeout=30,
-            )
-            # polling exited normally (shouldn't happen with none_stop=True)
-            break
-        except requests.exceptions.ReadTimeout:
-            logger.warning("Read timeout during polling, restarting in %ds…", backoff)
-        except requests.exceptions.ConnectionError:
-            logger.warning("Connection error during polling, restarting in %ds…", backoff)
-        except requests.exceptions.RequestException as exc:
-            logger.warning("Request error during polling: %s, restarting in %ds…", exc, backoff)
-        except Exception as exc:
-            logger.error("Unexpected polling error: %s, restarting in %ds…", exc, backoff)
-
-        time.sleep(backoff)
-        backoff = min(backoff * 2, _MAX_BACKOFF_SECONDS)
-
-
 def main():
     settings = load_settings()
+    db_dir = os.path.dirname(settings.database_path)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     bot = TeleBot(settings.token)
-    db = Database.init(settings.database_url)
+    db = Database.init(settings.database_path)
     llm = LLM(
         llm_configs=settings.llm_configs,
         image_config=settings.llm_image_config,
@@ -56,7 +28,7 @@ def main():
 
     try:
         register_handlers(bot, db, llm, admin_service)
-        _polling_with_backoff(bot)
+        bot.infinity_polling(timeout=60, long_polling_timeout=60)
     finally:
         db.close()
 

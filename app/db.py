@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Sequence, Tuple, Set
 
-import psycopg2
+import sqlite3
 
 
 GLOBAL_CHAT_ID = 0
@@ -51,75 +51,47 @@ class QuestionTemplate:
 class Database:
     def __init__(self, connection) -> None:
         self._connection = connection
-        self._ensure_schema()
-        self._ensure_user_table()
-        self._ensure_user_admin_column()
-        self._ensure_user_unique_constraint()
-        self._ensure_question_templates_table()
-        self._ensure_settings_table()
-        self._ensure_chat_settings_table()
-        self._ensure_chat_admins_table()
-        self._ensure_chat_bans_table()
-        self._ensure_default_question_templates()
+        self._ensure_tables()
 
-    def _execute(self, query: str, params=None):
-        """Execute a query using a fresh cursor and return it."""
-        cur = self._connection.cursor()
-        cur.execute(query, params)
-        return cur
+    def _fetchone(self, query: str, params=()) -> Optional[Sequence]:
+        """Execute a query and return the first row (or None)."""
+        return self._connection.execute(query, params).fetchone()
 
-    def _fetchone(self, query: str, params=None) -> Optional[Sequence]:
-        """Execute a query and return the first row (or None). Cursor is closed automatically."""
-        cur = self._connection.cursor()
-        try:
-            cur.execute(query, params)
-            return cur.fetchone()
-        finally:
-            cur.close()
+    def _fetchall(self, query: str, params=()) -> List[Sequence]:
+        """Execute a query and return all rows."""
+        return self._connection.execute(query, params).fetchall() or []
 
-    def _fetchall(self, query: str, params=None) -> List[Sequence]:
-        """Execute a query and return all rows. Cursor is closed automatically."""
-        cur = self._connection.cursor()
-        try:
-            cur.execute(query, params)
-            return cur.fetchall() or []
-        finally:
-            cur.close()
-
-    def _commit_query(self, query: str, params=None):
-        """Execute a query, commit, and close cursor."""
-        cur = self._connection.cursor()
-        try:
-            cur.execute(query, params)
-            self._connection.commit()
-        finally:
-            cur.close()
+    def _commit_query(self, query: str, params=()):
+        """Execute a query and commit."""
+        self._connection.execute(query, params)
+        self._connection.commit()
 
     @classmethod
-    def init(cls, database_url: str) -> "Database":
-        connection = psycopg2.connect(database_url)
+    def init(cls, database_path: str) -> "Database":
+        connection = sqlite3.connect(database_path)
+        connection.execute("PRAGMA journal_mode=WAL")
         return cls(connection)
 
     def ensure_user(self, user_id: int, username: str, chat_id: int) -> None:
         self._commit_query(
             """
-            INSERT INTO users.user (id, username, chat_id)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (id, chat_id) DO UPDATE SET username = EXCLUDED.username
+            INSERT INTO "user" (id, username, chat_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT (id, chat_id) DO UPDATE SET username = excluded.username
             """,
             (user_id, username, chat_id),
         )
 
     def get_user(self, user_id: int, chat_id: int) -> Optional[UserRecord]:
         row = self._fetchone(
-            "SELECT id, username, chat_id, tag, is_admin FROM users.user WHERE id = %s AND chat_id = %s",
+            "SELECT id, username, chat_id, tag, is_admin FROM user WHERE id = ? AND chat_id = ?",
             (user_id, chat_id),
         )
         return self._map_user(row)
 
     def get_tagged_users(self, chat_id: int) -> List[UserRecord]:
         rows = self._fetchall(
-            "SELECT id, username, chat_id, tag, is_admin FROM users.user WHERE chat_id = %s AND tag = True",
+            "SELECT id, username, chat_id, tag, is_admin FROM user WHERE chat_id = ? AND tag = 1",
             (chat_id,),
         )
         return [self._map_user(row) for row in rows if row]
@@ -128,8 +100,8 @@ class Database:
         row = self._fetchone(
             """
             SELECT id, username, chat_id, tag, is_admin
-            FROM users.user
-            WHERE LOWER(username) = LOWER(%s)
+            FROM user
+            WHERE LOWER(username) = LOWER(?)
             ORDER BY id DESC
             LIMIT 1
             """,
@@ -139,24 +111,24 @@ class Database:
 
     def get_tag_status(self, user_id: int, chat_id: int) -> Optional[bool]:
         row = self._fetchone(
-            "SELECT tag FROM users.user WHERE id = %s AND chat_id = %s",
+            "SELECT tag FROM user WHERE id = ? AND chat_id = ?",
             (user_id, chat_id),
         )
         return row[0] if row else None
 
     def set_tag_status(self, user_id: int, chat_id: int, should_tag: bool) -> None:
         self._commit_query(
-            "UPDATE users.user SET tag = %s WHERE id = %s AND chat_id = %s",
+            "UPDATE user SET tag = ? WHERE id = ? AND chat_id = ?",
             (should_tag, user_id, chat_id),
         )
 
     def get_question_templates(self, chat_id: Optional[int] = None) -> List[QuestionTemplate]:
         if chat_id is None:
             params = (GLOBAL_CHAT_ID,)
-            query = "SELECT chat_id, trigger_text, response_template FROM users.question_templates WHERE chat_id = %s"
+            query = "SELECT chat_id, trigger_text, response_template FROM question_templates WHERE chat_id = ?"
         else:
             params = (GLOBAL_CHAT_ID, chat_id)
-            query = "SELECT chat_id, trigger_text, response_template FROM users.question_templates WHERE chat_id IN (%s, %s)"
+            query = "SELECT chat_id, trigger_text, response_template FROM question_templates WHERE chat_id IN (?, ?)"
 
         rows = self._fetchall(query, params)
         template_map = {}
@@ -178,29 +150,20 @@ class Database:
     def save_question_template(self, template: QuestionTemplate) -> None:
         self._commit_query(
             """
-            INSERT INTO users.question_templates (chat_id, trigger_text, response_template)
-            VALUES (%s, %s, %s)
+            INSERT INTO question_templates (chat_id, trigger_text, response_template)
+            VALUES (?, ?, ?)
             ON CONFLICT (chat_id, trigger_text) DO UPDATE SET
-                response_template = EXCLUDED.response_template
+                response_template = excluded.response_template
             """,
             (template.chat_id, template.trigger_text, template.response_template),
         )
 
     def delete_question_template(self, chat_id: int, trigger_text: str) -> bool:
-        cur = self._connection.cursor()
-        try:
-            cur.execute(
-                """
-                DELETE FROM users.question_templates
-                WHERE chat_id = %s AND trigger_text = %s
-                """,
-                (chat_id, trigger_text),
-            )
-            deleted = cur.rowcount > 0
-            self._connection.commit()
-            return deleted
-        finally:
-            cur.close()
+        self._commit_query(
+            "DELETE FROM question_templates WHERE chat_id = ? AND trigger_text = ?",
+            (chat_id, trigger_text),
+        )
+        return self._connection.total_changes > 0
 
     def get_insult_probability(self, chat_id: Optional[int] = None) -> float:
         if chat_id is not None:
@@ -213,7 +176,7 @@ class Database:
 
         row = self._fetchone(
             """
-            SELECT value FROM users.bot_settings WHERE key = %s
+            SELECT value FROM bot_settings WHERE key = ?
             """,
             (INSULT_PROBABILITY_KEY,),
         )
@@ -231,9 +194,9 @@ class Database:
 
         self._commit_query(
             """
-            INSERT INTO users.bot_settings (key, value)
-            VALUES (%s, %s)
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            INSERT INTO bot_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value
             """,
             (INSULT_PROBABILITY_KEY, str(probability)),
         )
@@ -248,7 +211,7 @@ class Database:
                     pass
 
         row = self._fetchone(
-            "SELECT value FROM users.bot_settings WHERE key = %s",
+            "SELECT value FROM bot_settings WHERE key = ?",
             (INSULT_BOOST_KEY,),
         )
         if not row:
@@ -266,9 +229,9 @@ class Database:
 
         self._commit_query(
             """
-            INSERT INTO users.bot_settings (key, value)
-            VALUES (%s, %s)
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            INSERT INTO bot_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value
             """,
             (INSULT_BOOST_KEY, str(multiplier)),
         )
@@ -284,7 +247,7 @@ class Database:
 
         row = self._fetchone(
             """
-            SELECT value FROM users.bot_settings WHERE key = %s
+            SELECT value FROM bot_settings WHERE key = ?
             """,
             (INSULT_LEVEL_KEY,),
         )
@@ -305,7 +268,7 @@ class Database:
                     pass
 
         row = self._fetchone(
-            "SELECT value FROM users.bot_settings WHERE key = %s",
+            "SELECT value FROM bot_settings WHERE key = ?",
             (QUESTION_PHRASE_CHANCE_KEY,),
         )
         if not row:
@@ -325,7 +288,7 @@ class Database:
                     pass
 
         row = self._fetchone(
-            "SELECT value FROM users.bot_settings WHERE key = %s",
+            "SELECT value FROM bot_settings WHERE key = ?",
             (WHEN_PHRASE_CHANCE_KEY,),
         )
         if not row:
@@ -342,9 +305,9 @@ class Database:
 
         self._commit_query(
             """
-            INSERT INTO users.bot_settings (key, value)
-            VALUES (%s, %s)
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            INSERT INTO bot_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value
             """,
             (INSULT_LEVEL_KEY, str(level)),
         )
@@ -357,9 +320,9 @@ class Database:
 
         self._commit_query(
             """
-            INSERT INTO users.bot_settings (key, value)
-            VALUES (%s, %s)
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            INSERT INTO bot_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value
             """,
             (QUESTION_PHRASE_CHANCE_KEY, str(chance)),
         )
@@ -372,9 +335,9 @@ class Database:
 
         self._commit_query(
             """
-            INSERT INTO users.bot_settings (key, value)
-            VALUES (%s, %s)
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            INSERT INTO bot_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value
             """,
             (WHEN_PHRASE_CHANCE_KEY, str(chance)),
         )
@@ -423,22 +386,22 @@ class Database:
 
     def is_user_admin(self, user_id: int) -> bool:
         row = self._fetchone(
-            "SELECT COALESCE(bool_or(is_admin), FALSE) FROM users.user WHERE id = %s",
+            "SELECT COUNT(*) FROM user WHERE id = ? AND is_admin = 1",
             (user_id,),
         )
         return bool(row[0]) if row else False
 
     def set_user_admin(self, user_id: int, is_admin: bool) -> None:
         self._commit_query(
-            "UPDATE users.user SET is_admin = %s WHERE id = %s",
+            "UPDATE user SET is_admin = ? WHERE id = ?",
             (is_admin, user_id),
         )
 
     def add_chat_admin(self, user_id: int, chat_id: int) -> None:
         self._commit_query(
             """
-            INSERT INTO users.chat_admins (user_id, chat_id)
-            VALUES (%s, %s)
+            INSERT INTO chat_admins (user_id, chat_id)
+            VALUES (?, ?)
             ON CONFLICT (user_id, chat_id) DO NOTHING
             """,
             (user_id, chat_id),
@@ -446,64 +409,61 @@ class Database:
 
     def remove_chat_admin(self, user_id: int, chat_id: int) -> None:
         self._commit_query(
-            "DELETE FROM users.chat_admins WHERE user_id = %s AND chat_id = %s",
+            "DELETE FROM chat_admins WHERE user_id = ? AND chat_id = ?",
             (user_id, chat_id),
         )
 
     def is_chat_admin(self, user_id: int, chat_id: int) -> bool:
-        try:
-            cur = self._execute(
-                "SELECT 1 FROM users.chat_admins WHERE user_id = %s AND chat_id = %s",
-                (user_id, chat_id),
-            )
-            row = cur.fetchone()
-            cur.close()
-            return row is not None
-        except psycopg2.ProgrammingError:
-            return False
+        row = self._fetchone(
+            "SELECT 1 FROM chat_admins WHERE user_id = ? AND chat_id = ?",
+            (user_id, chat_id),
+        )
+        return row is not None
 
     def get_chat_admin_ids(self, chat_id: int) -> Set[int]:
         rows = self._fetchall(
-            "SELECT user_id FROM users.chat_admins WHERE chat_id = %s",
+            "SELECT user_id FROM chat_admins WHERE chat_id = ?",
             (chat_id,),
         )
         return {row[0] for row in rows if row and row[0] is not None}
 
     def add_chat_ban(self, user_id: int, chat_id: int, banned_until: Optional[datetime]) -> None:
         value = (
-            banned_until.astimezone(timezone.utc) if banned_until is not None else None
+            banned_until.astimezone(timezone.utc).isoformat() if banned_until is not None else None
         )
         self._commit_query(
             """
-            INSERT INTO users.chat_bans (user_id, chat_id, banned_until)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (user_id, chat_id) DO UPDATE SET banned_until = EXCLUDED.banned_until
+            INSERT INTO chat_bans (user_id, chat_id, banned_until)
+            VALUES (?, ?, ?)
+            ON CONFLICT (user_id, chat_id) DO UPDATE SET banned_until = excluded.banned_until
             """,
             (user_id, chat_id, value),
         )
 
     def remove_chat_ban(self, user_id: int, chat_id: int) -> None:
         self._commit_query(
-            "DELETE FROM users.chat_bans WHERE user_id = %s AND chat_id = %s",
+            "DELETE FROM chat_bans WHERE user_id = ? AND chat_id = ?",
             (user_id, chat_id),
         )
 
     def is_chat_banned(self, user_id: int, chat_id: int) -> bool:
         row = self._fetchone(
-            "SELECT banned_until FROM users.chat_bans WHERE user_id = %s AND chat_id = %s",
+            "SELECT banned_until FROM chat_bans WHERE user_id = ? AND chat_id = ?",
             (user_id, chat_id),
         )
         if not row:
             return False
-        banned_until = row[0]
-        if banned_until and banned_until <= datetime.now(timezone.utc):
-            self.remove_chat_ban(user_id, chat_id)
-            return False
+        banned_until_str = row[0]
+        if banned_until_str:
+            banned_until = datetime.fromisoformat(banned_until_str).replace(tzinfo=timezone.utc)
+            if banned_until <= datetime.now(timezone.utc):
+                self.remove_chat_ban(user_id, chat_id)
+                return False
         return True
 
     def get_chat_users(self, chat_id: int) -> List[UserRecord]:
         rows = self._fetchall(
-            "SELECT id, username, chat_id, tag, is_admin FROM users.user WHERE chat_id = %s ORDER BY username NULLS LAST, id",
+            "SELECT id, username, chat_id, tag, is_admin FROM user WHERE chat_id = ? ORDER BY CASE WHEN username IS NULL THEN 1 ELSE 0 END, username, id",
             (chat_id,),
         )
         return [self._map_user(row) for row in rows if row]
@@ -520,64 +480,26 @@ class Database:
             id=user_id,
             username=username or "",
             chat_id=chat_id,
-            tag=tag,
+            tag=bool(tag),
             is_admin=bool(is_admin),
         )
 
     def _ensure_question_templates_table(self) -> None:
         self._commit_query(
             """
-            CREATE TABLE IF NOT EXISTS users.question_templates (
-                chat_id BIGINT NOT NULL DEFAULT 0,
+            CREATE TABLE IF NOT EXISTS question_templates (
+                chat_id INTEGER NOT NULL DEFAULT 0,
                 trigger_text TEXT NOT NULL,
                 response_template TEXT NOT NULL,
                 PRIMARY KEY (chat_id, trigger_text)
             )
             """
         )
-        self._migrate_question_templates_schema()
-
-    def _migrate_question_templates_schema(self) -> None:
-        columns = {row[0] for row in self._fetchall(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = 'users' AND table_name = 'question_templates'
-            """
-        )}
-        if "response_template" not in columns:
-            self._commit_query(
-                "ALTER TABLE users.question_templates ADD COLUMN response_template TEXT"
-            )
-            self._commit_query(
-                """
-                UPDATE users.question_templates
-                SET response_template = COALESCE(user_template, bot_template, '{mention}{question}')
-                """
-            )
-        if "chat_id" not in columns:
-            self._commit_query(
-                "ALTER TABLE users.question_templates ADD COLUMN chat_id BIGINT NOT NULL DEFAULT 0"
-            )
-        self._commit_query(
-            "ALTER TABLE users.question_templates DROP CONSTRAINT IF EXISTS question_templates_pkey"
-        )
-        self._commit_query(
-            "ALTER TABLE users.question_templates ADD PRIMARY KEY (chat_id, trigger_text)"
-        )
-        # Optionally drop old columns
-        drop_columns = []
-        if "bot_template" in columns:
-            drop_columns.append("bot_template")
-        if "user_template" in columns:
-            drop_columns.append("user_template")
-        for column in drop_columns:
-            self._commit_query(f"ALTER TABLE users.question_templates DROP COLUMN IF EXISTS {column}")
 
     def _ensure_settings_table(self) -> None:
         self._commit_query(
             """
-            CREATE TABLE IF NOT EXISTS users.bot_settings (
+            CREATE TABLE IF NOT EXISTS bot_settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             )
@@ -587,8 +509,8 @@ class Database:
     def _ensure_chat_settings_table(self) -> None:
         self._commit_query(
             """
-            CREATE TABLE IF NOT EXISTS users.chat_settings (
-                chat_id BIGINT NOT NULL,
+            CREATE TABLE IF NOT EXISTS chat_settings (
+                chat_id INTEGER NOT NULL,
                 key TEXT NOT NULL,
                 value TEXT NOT NULL,
                 PRIMARY KEY (chat_id, key)
@@ -599,9 +521,9 @@ class Database:
     def _ensure_chat_admins_table(self) -> None:
         self._commit_query(
             """
-            CREATE TABLE IF NOT EXISTS users.chat_admins (
-                user_id BIGINT NOT NULL,
-                chat_id BIGINT NOT NULL,
+            CREATE TABLE IF NOT EXISTS chat_admins (
+                user_id INTEGER NOT NULL,
+                chat_id INTEGER NOT NULL,
                 PRIMARY KEY (user_id, chat_id)
             )
             """
@@ -610,72 +532,41 @@ class Database:
     def _ensure_chat_bans_table(self) -> None:
         self._commit_query(
             """
-            CREATE TABLE IF NOT EXISTS users.chat_bans (
-                user_id BIGINT NOT NULL,
-                chat_id BIGINT NOT NULL,
-                banned_until TIMESTAMPTZ,
+            CREATE TABLE IF NOT EXISTS chat_bans (
+                user_id INTEGER NOT NULL,
+                chat_id INTEGER NOT NULL,
+                banned_until TEXT,
                 PRIMARY KEY (user_id, chat_id)
             )
             """
         )
 
-    def _ensure_schema(self) -> None:
-        self._commit_query("CREATE SCHEMA IF NOT EXISTS users")
+    def _ensure_tables(self) -> None:
+        self._ensure_user_table()
+        self._ensure_question_templates_table()
+        self._ensure_settings_table()
+        self._ensure_chat_settings_table()
+        self._ensure_chat_admins_table()
+        self._ensure_chat_bans_table()
+        self._ensure_default_question_templates()
 
     def _ensure_user_table(self) -> None:
         self._commit_query(
             """
-            CREATE TABLE IF NOT EXISTS users.user (
-                id      NUMERIC,
+            CREATE TABLE IF NOT EXISTS "user" (
+                id       INTEGER,
                 username TEXT,
-                chat_id  NUMERIC,
-                tag      BOOLEAN DEFAULT true
+                chat_id  INTEGER,
+                tag      INTEGER DEFAULT 1,
+                is_admin INTEGER DEFAULT 0,
+                PRIMARY KEY (id, chat_id)
             )
-            """
-        )
-
-    def _ensure_user_admin_column(self) -> None:
-        self._commit_query(
-            """
-            ALTER TABLE users.user
-            ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE
-            """
-        )
-        self._commit_query(
-            "UPDATE users.user SET is_admin = FALSE WHERE is_admin IS NULL"
-        )
-
-    def _ensure_user_unique_constraint(self) -> None:
-        self._commit_query(
-            """
-            DELETE FROM users."user" a
-            USING users."user" b
-            WHERE a.ctid < b.ctid
-              AND a.id = b.id
-              AND a.chat_id = b.chat_id
-            """
-        )
-        self._commit_query(
-            """
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1
-                    FROM information_schema.table_constraints
-                    WHERE table_schema = 'users'
-                      AND table_name = 'user'
-                      AND constraint_name = 'user_pk'
-                ) THEN
-                    ALTER TABLE users."user"
-                    ADD CONSTRAINT user_pk PRIMARY KEY (id, chat_id);
-                END IF;
-            END $$;
             """
         )
 
     def _ensure_default_question_templates(self) -> None:
         existing = {row[0] for row in self._fetchall(
-            "SELECT trigger_text FROM users.question_templates WHERE chat_id = %s",
+            "SELECT trigger_text FROM question_templates WHERE chat_id = ?",
             (GLOBAL_CHAT_ID,),
         )}
         templates_to_insert = [
@@ -685,36 +576,28 @@ class Database:
         ]
         if not templates_to_insert:
             return
-
-        cur = self._connection.cursor()
-        try:
-            cur.executemany(
-                """
-                INSERT INTO users.question_templates (chat_id, trigger_text, response_template)
-                VALUES (%s, %s, %s)
-                """,
-                templates_to_insert,
-            )
-            self._connection.commit()
-        finally:
-            cur.close()
+        self._connection.executemany(
+            """
+            INSERT INTO question_templates (chat_id, trigger_text, response_template)
+            VALUES (?, ?, ?)
+            """,
+            templates_to_insert,
+        )
+        self._connection.commit()
 
     def _get_chat_setting(self, chat_id: int, key: str) -> Optional[str]:
-        try:
-            row = self._fetchone(
-                "SELECT value FROM users.chat_settings WHERE chat_id = %s AND key = %s",
-                (chat_id, key),
-            )
-            return row[0] if row else None
-        except psycopg2.ProgrammingError:
-            return None
+        row = self._fetchone(
+            "SELECT value FROM chat_settings WHERE chat_id = ? AND key = ?",
+            (chat_id, key),
+        )
+        return row[0] if row else None
 
     def _set_chat_setting(self, chat_id: int, key: str, value: str) -> None:
         self._commit_query(
             """
-            INSERT INTO users.chat_settings (chat_id, key, value)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (chat_id, key) DO UPDATE SET value = EXCLUDED.value
+            INSERT INTO chat_settings (chat_id, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT (chat_id, key) DO UPDATE SET value = excluded.value
             """,
             (chat_id, key, value),
         )
