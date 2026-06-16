@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Sequence, Tuple, Set
 
 import sqlite3
+import threading
 
 
 GLOBAL_CHAT_ID = 0
@@ -51,24 +52,28 @@ class QuestionTemplate:
 class Database:
     def __init__(self, connection) -> None:
         self._connection = connection
+        self._lock = threading.Lock()
         self._ensure_tables()
 
     def _fetchone(self, query: str, params=()) -> Optional[Sequence]:
         """Execute a query and return the first row (or None)."""
-        return self._connection.execute(query, params).fetchone()
+        with self._lock:
+            return self._connection.execute(query, params).fetchone()
 
     def _fetchall(self, query: str, params=()) -> List[Sequence]:
         """Execute a query and return all rows."""
-        return self._connection.execute(query, params).fetchall() or []
+        with self._lock:
+            return self._connection.execute(query, params).fetchall() or []
 
     def _commit_query(self, query: str, params=()):
         """Execute a query and commit."""
-        self._connection.execute(query, params)
-        self._connection.commit()
+        with self._lock:
+            self._connection.execute(query, params)
+            self._connection.commit()
 
     @classmethod
     def init(cls, database_path: str) -> "Database":
-        connection = sqlite3.connect(database_path)
+        connection = sqlite3.connect(database_path, check_same_thread=False)
         connection.execute("PRAGMA journal_mode=WAL")
         return cls(connection)
 
@@ -576,14 +581,15 @@ class Database:
         ]
         if not templates_to_insert:
             return
-        self._connection.executemany(
-            """
-            INSERT INTO question_templates (chat_id, trigger_text, response_template)
-            VALUES (?, ?, ?)
-            """,
-            templates_to_insert,
-        )
-        self._connection.commit()
+        with self._lock:
+            self._connection.executemany(
+                """
+                INSERT INTO question_templates (chat_id, trigger_text, response_template)
+                VALUES (?, ?, ?)
+                """,
+                templates_to_insert,
+            )
+            self._connection.commit()
 
     def _get_chat_setting(self, chat_id: int, key: str) -> Optional[str]:
         row = self._fetchone(
