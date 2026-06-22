@@ -31,7 +31,9 @@ from app.utils import (
 
 def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: AdminService) -> None:
     HISTORY_LIMIT = 20
-    chat_history: DefaultDict[int, Deque[Tuple[str, str]]] = defaultdict(lambda: deque(maxlen=HISTORY_LIMIT))
+    # Each entry: (display_name, content, reply_to_text or None)
+    # reply_to_text is a formatted string like "[БОТ]: текст" or "имя: текст"
+    chat_history: DefaultDict[int, Deque[Tuple[str, str, Optional[str]]]] = defaultdict(lambda: deque(maxlen=HISTORY_LIMIT))
     try:
         bot_info = bot.get_me()
         bot_id = bot_info.id
@@ -71,17 +73,33 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
             history_queue = chat_history.setdefault(chat_id, deque(maxlen=HISTORY_LIMIT))
         user_history_committed = False
 
+        # Build reply-to context if this message is a reply
+        reply_to_text: Optional[str] = None
+        reply_msg = getattr(message, "reply_to_message", None)
+        if reply_msg and reply_msg.from_user:
+            reply_content = (reply_msg.text or reply_msg.caption or "") or ""
+            reply_content = reply_content.strip()
+            if not reply_content:
+                reply_content = _describe_non_text_message(reply_msg)
+            if reply_content:
+                reply_user = reply_msg.from_user
+                if reply_user.id == bot_id:
+                    reply_to_text = f"[БОТ]: {reply_content}"
+                else:
+                    reply_name = _format_display_name(reply_user)
+                    reply_to_text = f"{reply_name}: {reply_content}"
+
         def commit_user_history() -> None:
             nonlocal user_history_committed
             if user_history_committed or not history_content or history_queue is None:
                 return
-            history_queue.append((display_name, history_content))
+            history_queue.append((display_name, history_content, reply_to_text))
             user_history_committed = True
 
         def log_bot_history(text: str) -> None:
             if not text or history_queue is None:
                 return
-            history_queue.append(("Быдлик", text))
+            history_queue.append(("Быдлик", text, None))
 
         def send_reply(bot: TeleBot, message, text: str) -> None:
             commit_user_history()
@@ -193,13 +211,19 @@ def register_handlers(bot: TeleBot, db: Database, llm: LLM, admin_service: Admin
             else:
                 prompt = text
 
+            if reply_to_text:
+                prompt = f"{prompt} [в ответ на: \"{reply_to_text}\"]"
+
             history_queue = chat_history.get(chat_id)
             history_lines = []
-            for name, content in list(history_queue or []):
+            for name, content, reply_to in list(history_queue or []):
                 if name == "Быдлик":
-                    history_lines.append(f"[БОТ]: {content}")
+                    line = f"[БОТ]: {content}"
                 else:
-                    history_lines.append(f"{name}: {content}")
+                    line = f"{name}: {content}"
+                if reply_to:
+                    line = f"{line} [в ответ на: \"{reply_to}\"]"
+                history_lines.append(line)
 
             answer = reply_with_min_delay(
                 bot,
